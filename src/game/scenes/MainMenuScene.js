@@ -9,8 +9,11 @@ export default class MainMenuScene extends Scene {
         const { width, height } = this.scale;
 
         this.cameras.main.setBackgroundColor('#090b11');
+        this.cameras.main.fadeIn(600);
 
-        this.add.rectangle(width / 2, height / 2, width, height, 0x0d1118);
+        const background = this.add.image(width / 2, height / 2, 'bg-menu');
+        background.setScale(Math.max(width / 1344, height / 768));
+        background.setDepth(-10);
 
         const glow = this.add.rectangle(width / 2, 200, 640, 110, 0x1f2937, 0.24);
         glow.setStrokeStyle(2, 0xf4d29b, 0.7);
@@ -43,7 +46,21 @@ export default class MainMenuScene extends Scene {
         button.add([buttonBg, buttonText]);
 
         const handlePlay = () => {
-            this.scene.start('TempleScene');
+            if (this.isStarting) {
+                return;
+            }
+
+            this.isStarting = true;
+            this.registry.set('reachedArena', false);
+            this.registry.set('bossIntroSeen', false);
+            this.registry.set('bossDefeated', false);
+            this.cameras.main.once('camerafadeoutcomplete', () => {
+                if (!this.sys.isActive()) {
+                    return;
+                }
+                this.scene.start('TempleScene');
+            });
+            this.cameras.main.fadeOut(400, 0, 0, 0);
         };
 
         buttonBg.on('pointerover', () => {

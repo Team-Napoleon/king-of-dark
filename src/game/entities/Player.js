@@ -32,6 +32,8 @@ export default class Player {
         this.attackRange = 90;
         this.attackHitboxSize = 70;
         this.isGameOver = false;
+        this.tintTimer = 0;
+        this.controlsLocked = false;
 
         this.keys = scene.input.keyboard.addKeys({
             left: 'A',
@@ -42,7 +44,38 @@ export default class Player {
         });
         this.cursors = scene.input.keyboard.createCursorKeys();
         this.isGrounded = false;
-        this.attackFlash = null;
+        this.attackVisual = scene.add.graphics().setDepth(52).setVisible(false);
+        this.attackVisualTween = scene.tweens.add({
+            targets: this.attackVisual,
+            alpha: 0,
+            scaleX: 1.4,
+            scaleY: 1.4,
+            duration: 140,
+            paused: true,
+            persist: true,
+            onComplete: () => {
+                if (!this.attackVisual || !this.attackVisual.active) {
+                    return;
+                }
+                this.attackVisual.setVisible(false);
+            },
+        });
+        this.attackSquashTween = scene.tweens.add({
+            targets: this.sprite,
+            scaleX: 0.8,
+            duration: 60,
+            yoyo: true,
+            paused: true,
+            persist: true,
+        });
+
+        scene.events.once('shutdown', () => {
+            this.attackVisualTween.stop();
+            this.attackSquashTween.stop();
+            if (this.attackVisual && this.attackVisual.active) {
+                this.attackVisual.destroy();
+            }
+        });
 
         this.playAnimation('hero-idle');
     }
@@ -85,7 +118,7 @@ export default class Player {
         }
     }
 
-    update() {
+    update(delta = this.scene.game.loop.delta) {
         const body = this.sprite.body;
 
         if (!body || this.isGameOver) {
@@ -97,8 +130,20 @@ export default class Player {
         const jumpPressed = Input.Keyboard.JustDown(this.keys.jump) || Input.Keyboard.JustDown(this.cursors.up);
         const attackPressed = Input.Keyboard.JustDown(this.keys.attack);
 
-        this.attackCooldown = Math.max(0, this.attackCooldown - this.scene.game.loop.delta / 1000);
-        this.invulnerableTimer = Math.max(0, this.invulnerableTimer - this.scene.game.loop.delta / 1000);
+        const step = delta / 1000;
+        this.attackCooldown = Math.max(0, this.attackCooldown - step);
+        this.invulnerableTimer = Math.max(0, this.invulnerableTimer - step);
+        this.tintTimer = Math.max(0, this.tintTimer - step);
+        if (this.tintTimer === 0) {
+            this.sprite.clearTint();
+        }
+
+        if (this.controlsLocked) {
+            body.setVelocity(0, 0);
+            this.playAnimation('hero-idle');
+            this.sprite.setFlipX(this.facing > 0);
+            return;
+        }
 
         body.setAccelerationX(0);
 
@@ -163,8 +208,8 @@ export default class Player {
                 return;
             }
 
-            const xOverlap = Math.abs(enemy.sprite.x - attackBox.x) < attackBox.width * 0.5 + 30;
-            const yOverlap = Math.abs(enemy.sprite.y - attackBox.y) < attackBox.height * 0.5 + 26;
+            const xOverlap = Math.abs(enemy.sprite.x - attackBox.x) < attackBox.width * 0.5 + (enemy.hitHalfWidth ?? 30);
+            const yOverlap = Math.abs(enemy.sprite.y - attackBox.y) < attackBox.height * 0.5 + (enemy.hitHalfHeight ?? 26);
             const facingCheck = this.facing === 1 ? enemy.sprite.x >= this.sprite.x : enemy.sprite.x <= this.sprite.x;
 
             if (xOverlap && yOverlap && facingCheck) {
@@ -173,33 +218,19 @@ export default class Player {
         });
 
         this.sprite.body.setVelocityX(this.facing * 160);
-        this.scene.tweens.add({
-            targets: this.sprite,
-            scaleX: 0.8,
-            duration: 60,
-            yoyo: true,
-        });
-
-        const slash = this.scene.add.graphics({
-            x: attackCenterX,
-            y: this.sprite.y,
-        });
+        this.attackSquashTween.restart();
+        this.attackVisual.clear();
+        this.attackVisual.setPosition(attackCenterX, this.sprite.y);
+        this.attackVisual.setScale(1);
+        this.attackVisual.setAlpha(0.9);
+        this.attackVisual.setVisible(true);
         const startAngle = this.facing > 0 ? -Math.PI / 2 : Math.PI / 2;
         const endAngle = this.facing > 0 ? Math.PI / 2 : Math.PI * 1.5;
-        slash.lineStyle(6, 0xfff0b3, 0.9);
-        slash.beginPath();
-        slash.arc(0, 0, 30, startAngle, endAngle, false);
-        slash.strokePath();
-        slash.setDepth(10);
-
-        this.scene.tweens.add({
-            targets: slash,
-            alpha: 0,
-            scaleX: 1.4,
-            scaleY: 1.4,
-            duration: 140,
-            onComplete: () => slash.destroy(),
-        });
+        this.attackVisual.lineStyle(6, 0xfff0b3, 0.9);
+        this.attackVisual.beginPath();
+        this.attackVisual.arc(0, 0, 30, startAngle, endAngle, false);
+        this.attackVisual.strokePath();
+        this.attackVisualTween.restart();
     }
 
     takeDamage(amount) {
@@ -209,12 +240,8 @@ export default class Player {
 
         this.health = Math.max(0, this.health - amount);
         this.invulnerableTimer = 1.0;
+        this.tintTimer = 0.09;
         this.sprite.setTint(0xff6b6b);
-        this.scene.time.delayedCall(90, () => {
-            if (this.sprite && this.sprite.active) {
-                this.sprite.clearTint();
-            }
-        });
 
         if (this.health <= 0) {
             this.isGameOver = true;
@@ -223,6 +250,13 @@ export default class Player {
             this.sprite.body.setVelocityX(-this.facing * 220);
             this.sprite.body.setVelocityY(-220);
         }
+    }
+
+    heal(amount) {
+        if (!this.sprite || !this.sprite.active || this.isGameOver) {
+            return;
+        }
+        this.health = Math.min(this.maxHealth, this.health + amount);
     }
 
     destroy() {

@@ -1,3 +1,4 @@
+> SUPERSEDED for the intro cutscene: follow docs/INTRO_CUTSCENE_SPEC.md and src/game/config/introData.js. Do not use this file for the intro.
 # King of Dark: story build runs for Antigravity (Phaser 4 + Vite)
 Put `src/game/config/storyData.js` in the project first. It holds every scene, line and timing, so the code never contains dialogue text.
 

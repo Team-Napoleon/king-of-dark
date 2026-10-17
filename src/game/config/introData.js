@@ -32,6 +32,9 @@ export const INTRO_IMAGES = {
 
 export function preloadIntroImages(scene) {
     Object.entries(INTRO_IMAGES).forEach(([key, file]) => scene.load.image(key, file));
+    if (!scene.textures.exists('hero-chibi')) {
+        scene.load.image('hero-chibi', 'assets/Hero/hero_chibi_left_gray_hair.png');
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -72,14 +75,14 @@ export const TYPE_MS_PER_CHAR = 28;
 
 export const DIALOGUE = [
     { id: 'n1', shot: 'village', start: 1.0,  end: 8.5,  speaker: 'NARRATOR',   text: 'In a world untouched by darkness, one man desired something no ordinary life could offer.' },
-    { id: 'c1', shot: 'market',  start: 9.6,  end: 14.8, speaker: 'CUSTOMER',   text: 'They say the old temple hides a forbidden power.' },
-    { id: 's1', shot: 'market',  start: 15.2, end: 20.5, speaker: 'SHOPKEEPER', text: 'Aye. And nobody who goes in ever comes back.' },
-    { id: 'h1', shot: 'market',  start: 20.8, end: 25.3, speaker: 'HERO',       text: 'Because none of them were strong enough.', style: 'quiet' },
-    { id: 'm1', shot: 'market',  start: 27.0, end: 32.8, speaker: 'MOTHER',     text: 'Stay, son. Power always takes more than it gives.' },
-    { id: 'h2', shot: 'market',  start: 33.2, end: 39.5, speaker: 'HERO',       text: 'Why settle for bread, Mother, when I could have a kingdom?' },
-    { id: 'h3', shot: 'market',  start: 39.8, end: 44.5, speaker: 'HERO',       text: "I'll be back before sunset. I promise." },
-    { id: 'h4', shot: 'temple',  start: 46.0, end: 53.2, speaker: 'HERO',       text: 'Strength earns respect. Power commands it. And I will have both.' },
-    { id: 'h5', shot: 'temple',  start: 54.0, end: 59.9, speaker: 'HERO',       text: 'They call it forbidden power. I call it my destiny.' },
+    { id: 'c1', shot: 'market',  start: 9.6,  end: 14.8, speaker: 'CUSTOMER',   text: 'They say the old temple hides a forbidden power.', heroFacing: 'right' },
+    { id: 's1', shot: 'market',  start: 15.2, end: 20.5, speaker: 'SHOPKEEPER', text: 'Aye. And nobody who goes in ever comes back.', heroFacing: 'right' },
+    { id: 'h1', shot: 'market',  start: 20.8, end: 25.3, speaker: 'HERO',       text: 'Because none of them were strong enough.', style: 'quiet', heroFacing: 'right' },
+    { id: 'm1', shot: 'market',  start: 27.0, end: 32.8, speaker: 'MOTHER',     text: 'Stay, son. Power always takes more than it gives.', heroFacing: 'left' },
+    { id: 'h2', shot: 'market',  start: 33.2, end: 39.5, speaker: 'HERO',       text: 'Why settle for bread, Mother, when I could have a kingdom?', heroFacing: 'left' },
+    { id: 'h3', shot: 'market',  start: 39.8, end: 44.5, speaker: 'HERO',       text: "I'll be back before sunset. I promise.", heroFacing: 'left' },
+    { id: 'h4', shot: 'temple',  start: 46.0, end: 53.2, speaker: 'HERO',       text: 'Strength earns respect. Power commands it. And I will have both.', heroFacing: 'right' },
+    { id: 'h5', shot: 'temple',  start: 54.0, end: 59.9, speaker: 'HERO',       text: 'They call it forbidden power. I call it my destiny.', heroFacing: 'right' },
 ];
 
 // ---------------------------------------------------------------------------

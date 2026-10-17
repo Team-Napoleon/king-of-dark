@@ -42,6 +42,7 @@ export default class BootScene extends Scene {
 
         preloadSheets(this);
         preloadIntroImages(this);
+        this.load.image('hero-chibi', 'assets/Hero/hero_chibi_left_gray_hair.png');
         this.load.image('bg-menu', 'assets/backgrounds/menu.jpg');
         this.load.image('bg-temple', 'assets/backgrounds/temple.jpg');
         this.load.image('bg-arena', 'assets/backgrounds/arena.jpg');

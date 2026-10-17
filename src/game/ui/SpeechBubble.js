@@ -24,6 +24,7 @@ export default class SpeechBubble {
             color: style.textColor || '#f2ecff',
             stroke: '#000000',
             strokeThickness: 3,
+            lineSpacing: 2,
         });
 
         // Crisp rendering at scale
@@ -77,11 +78,11 @@ export default class SpeechBubble {
         }
 
         const bodyWidth = Math.ceil(maxLineWidth);
-        const lineHeight = fontSize * 1.25;
+        const lineHeight = Math.ceil(fontSize * 1.35);
         const bodyHeight = Math.ceil(lines.length * lineHeight);
 
-        const pw = Math.ceil(bodyWidth + padding * 2);
-        const ph = Math.ceil(bodyHeight + padding * 2);
+        const pw = Math.ceil(bodyWidth + padding * 2 + 6);
+        const ph = Math.ceil(bodyHeight + padding * 2 + 2);
 
         // Precompute character reveal times with calm pacing
         const cueDuration = cue.end - cue.start;
@@ -216,6 +217,8 @@ export default class SpeechBubble {
         if (w > maxW || h > maxH) {
             const reduceFactor = Math.min(maxW / w, maxH / h);
             s *= reduceFactor;
+            const minScale = (style.fit?.minFontPx || 10) / (style.fontSize || 14);
+            s = Math.max(minScale, s);
             w = pw * s;
             h = ph * s;
         }

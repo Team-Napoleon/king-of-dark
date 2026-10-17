@@ -12,7 +12,6 @@ import {
     EFFECTS,
 } from '../config/introData';
 import { INTRO_ACTORS } from '../config/introActors';
-import { showFrame, SHEETS } from '../config/animationData';
 import Letterbox from '../ui/Letterbox';
 import DialogueBox from '../ui/DialogueBox';
 import SpeechBubble from '../ui/SpeechBubble';
@@ -51,12 +50,9 @@ export default class IntroScene extends Scene {
             .setDepth(9)
             .setVisible(false);
 
-        this.heroSprite = this.add.sprite(0, 0, 'hero-walk', 0)
+        this.heroSprite = this.add.image(0, 0, 'hero-chibi')
             .setDepth(10)
             .setVisible(false);
-
-        // Pose hero once with showFrame (standing still: 'hero-walk', frame 0, facing left: -1)
-        showFrame(this.heroSprite, 'hero-walk', 0, -1);
 
         // Letterbox bars helper
         this.letterbox = new Letterbox(this);
@@ -273,6 +269,42 @@ export default class IntroScene extends Scene {
         return 'intro-3';
     }
 
+    getHeroFacing(t, pictureKey) {
+        const entry = INTRO_ACTORS.hero.byImage[pictureKey];
+        if (!entry) return 'left';
+
+        if (pictureKey === 'intro-2') {
+            const cues = DIALOGUE.filter((c) => c.shot === 'market');
+            // Check if any dialogue cue is actively speaking
+            const activeCue = cues.find((c) => t >= c.start && t < c.end);
+            if (activeCue) {
+                if (activeCue.heroFacing) return activeCue.heroFacing;
+                const spk = (activeCue.speaker || '').toUpperCase().trim();
+                if (spk === 'HERO') {
+                    // h1 replies to stall conversation (right); h2, h3 address Mother (left)
+                    return activeCue.id === 'h1' ? 'right' : 'left';
+                }
+                const shotAnchors = INTRO_ACTORS.bubbleAnchors['intro-2'] || {};
+                const anchorSrc = shotAnchors[spk];
+                if (anchorSrc) {
+                    return anchorSrc.x > entry.feetX ? 'right' : 'left';
+                }
+            }
+
+            // Dialogue transitions / between cues:
+            // When camera begins pan to Frame B (Mother + Hero) at 25.5s, Hero turns to face Mother
+            if (t >= 25.5) {
+                return 'left';
+            }
+            // Once market stall scene begins at 9.6s, Hero faces right towards the stall
+            if (t >= 9.6) {
+                return 'right';
+            }
+        }
+
+        return entry.facing || 'left';
+    }
+
     updateHero(t) {
         if (!this.heroSprite || !this.heroSprite.active) {
             return;
@@ -305,17 +337,21 @@ export default class IntroScene extends Scene {
         this.heroShadow.setVisible(true);
         this.heroSprite.setAlpha(pictureAlpha);
 
-        // Facing and origin
-        const sheet = SHEETS['hero-walk'];
-        const isFacingRight = entry.facing === 'right';
+        // Facing and origin:
+        // hero_chibi_left_gray_hair.png natively faces LEFT.
+        // Therefore facing 'left' -> flipX = false; facing 'right' -> flipX = true.
+        const facing = this.getHeroFacing(t, pictureKey);
+        const isFacingRight = facing === 'right';
         this.heroSprite.setFlipX(isFacingRight);
 
-        const ox = sheet.anchorX / sheet.frameWidth;
-        this.heroSprite.setOrigin(isFacingRight ? 1 - ox : ox, sheet.anchorY / sheet.frameHeight);
+        // Origin at bottom-center of chibi figure
+        this.heroSprite.setOrigin(0.5, 1.0);
 
         // Scale: standing height is heightSrc * IMG_SCALE world pixels
+        // Chibi texture height is 1804px
         const standingHeightWorld = entry.heightSrc * IMG_SCALE;
-        const scale = standingHeightWorld / sheet.figureHeight;
+        const textureHeight = this.heroSprite.height || 1804;
+        const scale = standingHeightWorld / textureHeight;
         this.heroSprite.setScale(scale);
 
         if (entry.tint !== undefined) {
@@ -489,7 +525,10 @@ export default class IntroScene extends Scene {
             const entry = INTRO_ACTORS.hero.byImage[pictureKey];
             if (!entry) return null;
             const headTopOffset = INTRO_ACTORS.hero.headTopOffsetSrc || 8;
+            const breathe = INTRO_ACTORS.hero.breathe;
+            const breatheOffset = breathe ? breathe.px * Math.sin((2 * Math.PI * this.t) / breathe.period) : 0;
             anchorWorld = toWorld(entry.feetX, entry.feetY - entry.heightSrc - headTopOffset);
+            anchorWorld.y += breatheOffset;
         } else {
             const shotAnchors = INTRO_ACTORS.bubbleAnchors[pictureKey] || {};
             const anchorSrc = shotAnchors[canonical];

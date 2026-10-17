@@ -46,20 +46,14 @@ export default class IntroScene extends Scene {
         });
         this.createSwingRig();
 
-        // The market hero is a picture; the temple hero remains the gameplay sprite.
         this.heroShadow = this.add.graphics()
             .setDepth(9)
             .setVisible(false);
 
-        this.heroSprite = this.add.image(0, 0, 'hero-chibi')
+        const initialHeroEntry = INTRO_ACTORS.hero.byImage['intro-2'];
+        this.heroPicture = this.add.image(0, 0, initialHeroEntry.texture)
+            .setOrigin(initialHeroEntry.feetAnchorFracX, 1)
             .setDepth(10)
-            .setVisible(false);
-
-        const streetHero = INTRO_ACTORS.hero.byImage['intro-2'];
-        this.streetHeroImage = this.add.image(0, 0, streetHero.texture)
-            .setOrigin(streetHero.feetAnchorFracX, 1)
-            .setDepth(10)
-            .setTint(streetHero.tint)
             .setVisible(false);
 
         this.heroEyeGlow = this.add.graphics()
@@ -204,11 +198,7 @@ export default class IntroScene extends Scene {
                     this.updateHero(this.t);
                 } else if (event.code === 'KeyF') {
                     const currentFacing = this.getHeroFacing(this.t, pictureKey);
-                    if (entry.kind === 'image') {
-                        this.placementFacingOverride = currentFacing === 'left' ? 'right' : 'left';
-                    } else {
-                        entry.facing = entry.facing === 'left' ? 'right' : 'left';
-                    }
+                    this.placementFacingOverride = currentFacing === 'left' ? 'right' : 'left';
                     this.updateHero(this.t);
                 } else if (event.code === 'KeyP') {
                     console.log(`[Hero Placement: ${pictureKey}]`, {
@@ -291,44 +281,37 @@ export default class IntroScene extends Scene {
         const entry = INTRO_ACTORS.hero.byImage[pictureKey];
         if (!entry) return 'left';
 
-        if (entry.kind === 'image') {
-            let facing = entry.initialFacing;
-            for (const cue of DIALOGUE) {
-                if (cue.shot !== 'market' || cue.start > t) {
-                    continue;
-                }
-                const speaker = (cue.speaker || '').toUpperCase().trim();
-                const mappedFacing = entry.facingBySpeaker?.[speaker];
-                if (mappedFacing) {
-                    facing = mappedFacing;
-                }
-            }
-            return facing;
+        if (pictureKey !== 'intro-2') {
+            return entry.initialFacing || 'left';
         }
-
-        return entry.facing || 'left';
+        let facing = entry.initialFacing || 'left';
+        for (const cue of DIALOGUE) {
+            if (cue.shot !== 'market' || cue.start > t) {
+                continue;
+            }
+            const speaker = (cue.speaker || '').toUpperCase().trim();
+            const mappedFacing = entry.facingBySpeaker?.[speaker];
+            if (mappedFacing) {
+                facing = mappedFacing;
+            }
+        }
+        return facing;
     }
 
     updateHero(t) {
         const pictureKey = this.getCurrentPictureKey();
         const entry = INTRO_ACTORS.hero.byImage[pictureKey];
-        const isMarketPicture = entry?.kind === 'image' && pictureKey === 'intro-2';
-        const isGameplaySprite = entry?.kind === 'sprite' && pictureKey === 'intro-3';
-        if (this.heroSprite?.active) {
-            this.heroSprite.setVisible(false);
-        }
-        if (this.streetHeroImage?.active) {
-            this.streetHeroImage.setVisible(false);
-        }
-        if (!entry || (!isMarketPicture && !isGameplaySprite)) {
-            this.heroSprite.setVisible(false);
+        if (!entry || entry.kind !== 'image') {
+            this.heroPicture.setVisible(false);
             this.heroShadow.setVisible(false);
             return;
         }
 
-        const pictureAlpha = this.shotImages[pictureKey === 'intro-2' ? 'market' : 'temple']?.alpha ?? 0;
+        const shotId = pictureKey === 'intro-2' ? 'market' : 'temple';
+        const pictureAlpha = this.shotImages[shotId]?.alpha ?? 0;
 
-        if (pictureAlpha <= 0 || (isMarketPicture && t >= SHOTS[2].start)) {
+        if (pictureAlpha <= 0) {
+            this.heroPicture.setVisible(false);
             this.heroShadow.setVisible(false);
             return;
         }
@@ -345,26 +328,17 @@ export default class IntroScene extends Scene {
         const breatheOffset = breathe ? breathe.px * Math.sin((2 * Math.PI * t) / breathe.period) : 0;
         const displayedHeight = entry.heightSrc * IMG_SCALE;
 
-        if (isMarketPicture && this.streetHeroImage?.active) {
-            this.streetHeroImage
-                .setVisible(true)
-                .setAlpha(pictureAlpha)
-                .setOrigin(facing === 'right' ? 1 - entry.feetAnchorFracX : entry.feetAnchorFracX, 1)
-                .setFlipX(facing === 'right')
-                .setPosition(feetWorld.x, feetWorld.y + breatheOffset)
-                .setScale(displayedHeight / this.streetHeroImage.height);
-        } else if (isGameplaySprite && this.heroSprite?.active) {
-            this.heroSprite
-                .setVisible(true)
-                .setAlpha(pictureAlpha)
-                .setFlipX(facing === 'right')
-                .setOrigin(0.5, 1.0)
-                .setScale(displayedHeight / (this.heroSprite.height || 1804))
-                .setPosition(feetWorld.x, feetWorld.y + breatheOffset);
-            if (entry.tint !== undefined) {
-                this.heroSprite.setTint(entry.tint);
-            }
+        if (this.heroPicture.texture.key !== entry.texture) {
+            this.heroPicture.setTexture(entry.texture);
         }
+        this.heroPicture
+            .setVisible(true)
+            .setAlpha(pictureAlpha)
+            .setOrigin(facing === 'right' ? 1 - entry.feetAnchorFracX : entry.feetAnchorFracX, 1)
+            .setFlipX(facing === 'right')
+            .setTint(entry.tint ?? 0xffffff)
+            .setPosition(feetWorld.x, feetWorld.y + breatheOffset)
+            .setScale(displayedHeight / this.heroPicture.height);
 
         // Soft shadow ellipse under feet
         this.heroShadow.clear();
@@ -380,7 +354,8 @@ export default class IntroScene extends Scene {
         const effect = EFFECTS.heroEyes;
         const entry = INTRO_ACTORS.hero.byImage['intro-2'];
         const active = effect && entry.eyes && t >= effect.at && t < effect.at + effect.duration &&
-            this.streetHeroImage?.visible && this.streetHeroImage.alpha > 0;
+            this.heroPicture?.visible && this.heroPicture.alpha > 0 &&
+            this.getCurrentPictureKey() === 'intro-2';
         if (!active) {
             this.heroEyeGlow.setVisible(false);
             return;
@@ -750,11 +725,8 @@ export default class IntroScene extends Scene {
         if (this.swingSprite && this.swingSprite.active) {
             this.swingSprite.destroy();
         }
-        if (this.streetHeroImage && this.streetHeroImage.active) {
-            this.streetHeroImage.destroy();
-        }
-        if (this.heroSprite && this.heroSprite.active) {
-            this.heroSprite.destroy();
+        if (this.heroPicture && this.heroPicture.active) {
+            this.heroPicture.destroy();
         }
         if (this.heroShadow && this.heroShadow.active) {
             this.heroShadow.destroy();

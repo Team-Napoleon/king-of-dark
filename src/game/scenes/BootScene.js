@@ -43,11 +43,13 @@ export default class BootScene extends Scene {
 
         preloadSheets(this);
         preloadIntroImages(this);
-        const streetHero = INTRO_ACTORS.hero.byImage['intro-2'];
-        if (streetHero?.kind === 'image') {
-            this.load.image(streetHero.texture, 'assets/Hero/hero-intro2.png');
-        }
-        this.load.image('hero-chibi', 'assets/Hero/hero_chibi_left_gray_hair.png');
+        const loadedHeroTextures = new Set();
+        Object.values(INTRO_ACTORS.hero.byImage).forEach((entry) => {
+            if (entry.kind === 'image' && !loadedHeroTextures.has(entry.texture)) {
+                this.load.image(entry.texture, entry.file);
+                loadedHeroTextures.add(entry.texture);
+            }
+        });
         this.load.image('bg-menu', 'assets/backgrounds/menu.jpg');
         this.load.image('bg-temple', 'assets/backgrounds/temple.jpg');
         this.load.image('bg-arena', 'assets/backgrounds/arena.jpg');

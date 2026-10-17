@@ -2,6 +2,82 @@ import { Math as PMath } from 'phaser';
 import { INTRO_ACTORS } from '../config/introActors';
 import { EFFECTS, SPEAKER_COLORS } from '../config/introData';
 
+export function layoutBubbleText(text, { fontSize = 14, padding = 10, maxWidth = 210 } = {}) {
+    const words = text.split(' ');
+    const lines = [];
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) {
+        throw new Error('Unable to create a text measurement context for speech bubbles.');
+    }
+    context.font = `${fontSize}px Arial`;
+
+    let currentLine = '';
+    for (const word of words) {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        if (context.measureText(testLine).width > maxWidth && currentLine) {
+            lines.push(currentLine);
+            currentLine = word;
+        } else {
+            currentLine = testLine;
+        }
+    }
+    if (currentLine) {
+        lines.push(currentLine);
+    }
+
+    const wrappedText = lines.join('\n');
+    const maxLineWidth = lines.reduce(
+        (width, line) => Math.max(width, context.measureText(line).width),
+        0
+    );
+    const bodyWidth = Math.ceil(maxLineWidth);
+    const lineHeight = Math.ceil(fontSize * 1.35);
+    const bodyHeight = Math.ceil(lines.length * lineHeight);
+
+    return {
+        wrappedText,
+        pw: Math.ceil(bodyWidth + padding * 2 + 6),
+        ph: Math.ceil(bodyHeight + padding * 2 + 2),
+    };
+}
+
+export function createRevealSchedule(text, pacing, { pauseAfterLast = true } = {}) {
+    let accumulated = 0;
+    const revealTimes = [];
+    const msPerChar = (pacing.msPerChar ?? 75) / 1000;
+    const pauseComma = (pacing.pauseComma ?? 180) / 1000;
+    const pauseStop = (pacing.pauseStop ?? 350) / 1000;
+
+    for (let index = 0; index < text.length; index += 1) {
+        let cost = msPerChar;
+        const character = text[index];
+        const canPause = pauseAfterLast || index < text.length - 1;
+        if (canPause && character === ',') {
+            cost += pauseComma;
+        } else if (canPause && (character === '?' || character === '!')) {
+            cost += pauseStop;
+        } else if (canPause && character === '.' && (index === text.length - 1 || text[index + 1] !== '.')) {
+            cost += pauseStop;
+        }
+        accumulated += cost;
+        revealTimes.push(accumulated);
+    }
+    return { revealTimes, totalDuration: accumulated };
+}
+
+export function sliceWrappedText(wrappedText, visibleCount) {
+    let characterIndex = 0;
+    let stringIndex = 0;
+    while (stringIndex < wrappedText.length && characterIndex < visibleCount) {
+        if (wrappedText[stringIndex] !== '\n') {
+            characterIndex += 1;
+        }
+        stringIndex += 1;
+    }
+    return wrappedText.slice(0, stringIndex);
+}
+
 export default class SpeechBubble {
     constructor(scene) {
         this.scene = scene;
@@ -42,47 +118,7 @@ export default class SpeechBubble {
         const fontSize = bubbleStyle.fontSize ?? 14;
         const padding = bubbleStyle.padding ?? 10;
         const maxTextWidth = bubbleStyle.maxWidth ?? 210;
-
-        // Wrap full text at base font size so wrapping never reflows
-        const words = text.split(' ');
-        let currentLine = '';
-        const lines = [];
-
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        context.font = `${fontSize}px Arial`;
-
-        for (let i = 0; i < words.length; i++) {
-            const testLine = currentLine.length > 0 ? `${currentLine} ${words[i]}` : words[i];
-            const testWidth = context.measureText(testLine).width;
-            if (testWidth > maxTextWidth && currentLine.length > 0) {
-                lines.push(currentLine);
-                currentLine = words[i];
-            } else {
-                currentLine = testLine;
-            }
-        }
-        if (currentLine.length > 0) {
-            lines.push(currentLine);
-        }
-
-        const wrappedText = lines.join('\n');
-
-        // Measure base panel width and height
-        let maxLineWidth = 0;
-        for (const line of lines) {
-            const w = context.measureText(line).width;
-            if (w > maxLineWidth) {
-                maxLineWidth = w;
-            }
-        }
-
-        const bodyWidth = Math.ceil(maxLineWidth);
-        const lineHeight = Math.ceil(fontSize * 1.35);
-        const bodyHeight = Math.ceil(lines.length * lineHeight);
-
-        const pw = Math.ceil(bodyWidth + padding * 2 + 6);
-        const ph = Math.ceil(bodyHeight + padding * 2 + 2);
+        const layout = layoutBubbleText(text, { fontSize, padding, maxWidth: maxTextWidth });
 
         // Precompute character reveal times with calm pacing
         const cueDuration = cue.end - cue.start;
@@ -93,40 +129,17 @@ export default class SpeechBubble {
             cueDuration - fadeOut - 0.2
         );
 
-        let accumulated = 0;
-        const rawTimes = [];
-        const msPerChar = (pacing.msPerChar ?? 75) / 1000;
-        const pauseComma = (pacing.pauseComma ?? 180) / 1000;
-        const pauseStop = (pacing.pauseStop ?? 350) / 1000;
-
-        for (let i = 0; i < text.length; i++) {
-            let cost = msPerChar;
-            const ch = text[i];
-            if (ch === ',') {
-                cost += pauseComma;
-            } else if (ch === '?' || ch === '!') {
-                cost += pauseStop;
-            } else if (ch === '.') {
-                if (i === text.length - 1 || text[i + 1] !== '.') {
-                    cost += pauseStop;
-                }
-            }
-            accumulated += cost;
-            rawTimes.push(accumulated);
-        }
-
-        const totalUnscaled = accumulated;
+        const schedule = createRevealSchedule(text, pacing);
+        const totalUnscaled = schedule.totalDuration;
         let scaleFactor = 1.0;
-        let revealTimes = rawTimes;
+        let revealTimes = schedule.revealTimes;
         if (totalUnscaled > maxAllowed) {
             scaleFactor = maxAllowed / totalUnscaled;
             revealTimes = rawTimes.map((t) => t * scaleFactor);
         }
 
         return {
-            wrappedText,
-            pw,
-            ph,
+            ...layout,
             revealTimes,
             totalDuration: totalUnscaled > maxAllowed ? maxAllowed : totalUnscaled,
             scaleFactor,
@@ -180,15 +193,7 @@ export default class SpeechBubble {
 
         // Slice pre-wrapped text preserving fixed newlines
         const fullWrapped = this.precomputed.wrappedText;
-        let charIndex = 0;
-        let strIndex = 0;
-        while (strIndex < fullWrapped.length && charIndex < visibleCount) {
-            if (fullWrapped[strIndex] !== '\n') {
-                charIndex++;
-            }
-            strIndex++;
-        }
-        this.bodyText.setText(fullWrapped.slice(0, strIndex));
+        this.bodyText.setText(sliceWrappedText(fullWrapped, visibleCount));
 
         // Container scale follows the configured camera zoom range.
         const cam = this.scene.cameras.main;

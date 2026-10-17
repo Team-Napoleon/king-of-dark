@@ -10,7 +10,7 @@ export const INTRO_ACTORS = {
       // facing LEFT, feet at the bottom edge, feet anchor at 45% of the width). Facing right = flipX about the feet point.
       // Camera is static on the full picture, so these are fixed screen-ish sizes: feet on the cobblestone path in the centre.
       'intro-2': {
-        kind: 'image', texture: 'hero-intro2', file: 'assets/intro/hero-intro2.png',
+        kind: 'image', texture: 'hero-intro2', file: 'assets/Hero/hero-intro2.png',
         nativeFacing: 'left', feetAnchorFracX: 0.449,
         feetX: 725, feetY: 650, heightSrc: 124,
         initialFacing: 'right',
@@ -19,8 +19,15 @@ export const INTRO_ACTORS = {
         tint: 0xffe2c4, shadow: { alpha: 0.35, widthRatio: 0.55, heightRatio: 0.12 },
         eyes: { dx: 0.061, dy: 0.702, count: 1 },    // single visible eye (side view): fraction of height; dx toward facing
       },
-      // TEMPLE HILL ('intro-3'): unchanged, the gameplay sprite standing on the path below the castle.
-      'intro-3': { kind: 'sprite', feetX: 843, feetY: 440, heightSrc: 62, facing: 'right', tint: 0xe9c9b8, shadow: { alpha: 0.30, widthRatio: 0.55, heightRatio: 0.12 } },
+      // TEMPLE HILL ('intro-3'): the SAME chibi picture (texture 'hero-intro2'), standing on the path below the castle,
+      // facing right (flipX). Same rules as the street scene: one picture hero, moved/scaled/flipped per shot.
+      'intro-3': {
+        kind: 'image', texture: 'hero-intro2', file: 'assets/Hero/hero-intro2.png',
+        nativeFacing: 'left', feetAnchorFracX: 0.449,
+        feetX: 843, feetY: 440, heightSrc: 62,
+        initialFacing: 'right',
+        tint: 0xe9c9b8, shadow: { alpha: 0.30, widthRatio: 0.55, heightRatio: 0.12 },
+      },
     },
     fadeWithPicture: true,      // hero alpha = alpha of that shot's picture (crossfades together)
     breathe: { px: 1, period: 3.2 },   // vertical idle sway driven by the master clock (not a tween)

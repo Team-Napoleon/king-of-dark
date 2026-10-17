@@ -4,7 +4,10 @@ import HealthOrb from '../entities/HealthOrb';
 import Player from '../entities/Player';
 import DarknessOverlay from '../fx/DarknessOverlay';
 import PlayerHud from '../ui/PlayerHud';
-import { DEBUG_KEYS, HEALTH_ORB, PORTAL, TEMPLE_WAVE } from '../config/animationData';
+import BeatRunner from '../story/BeatRunner';
+import WorldBubble from '../ui/WorldBubble';
+import { ACT1_PACING, ACT1_SPEAKERS, VOICE_STYLE } from '../config/actOneData';
+import { DEBUG_KEYS, HEALTH_ORB, HERO_STAND_PX, PORTAL, TEMPLE_WAVE } from '../config/animationData';
 
 export default class TempleScene extends Scene {
     constructor() {
@@ -108,9 +111,26 @@ export default class TempleScene extends Scene {
                 unlock: 'F5',
                 teleport: 'F6',
             });
+            this.input.keyboard.addCapture('F10');
+            this.storyTestKey = this.input.keyboard.addKey('F10');
+            this.worldBubble = new WorldBubble(this, {
+                speakers: ACT1_SPEAKERS,
+                pacing: ACT1_PACING,
+                voiceStyle: VOICE_STYLE,
+            });
+            this.worldBubble.setAnchor('hero', () => ({
+                x: this.player.sprite.x,
+                y: this.player.sprite.body.bottom - HERO_STAND_PX - 10,
+            }));
         }
 
         this.events.once('shutdown', () => {
+            if (this.debugStoryRunner) {
+                this.debugStoryRunner.destroy();
+            }
+            if (this.worldBubble) {
+                this.worldBubble.destroy();
+            }
             if (this.hud) {
                 this.hud.destroy();
             }
@@ -408,6 +428,32 @@ export default class TempleScene extends Scene {
         this.updateHealthOrbs(delta);
 
         if (DEBUG_KEYS) {
+            if (Input.Keyboard.JustDown(this.storyTestKey)) {
+                if (this.debugStoryRunner) {
+                    this.debugStoryRunner.destroy();
+                }
+                this.worldBubble.clear();
+                const testBeats = [
+                    { id: 'bubble-hero-1', type: 'line', who: 'HERO', text: 'Testing the hero bubble.' },
+                    { id: 'bubble-voice', type: 'line', who: 'KING_VOICE', text: 'A voice from nowhere.' },
+                    { id: 'bubble-hero-2', type: 'line', who: 'HERO', text: 'Back to normal.' },
+                ];
+                const lineHandler = {
+                    start: (beat) => {
+                        const state = { done: false };
+                        this.worldBubble.say({
+                            who: beat.who,
+                            text: beat.text,
+                            onDone: () => {
+                                state.done = true;
+                            },
+                        });
+                        return state;
+                    },
+                    update: (_dt, state) => state.done,
+                };
+                this.debugStoryRunner = new BeatRunner(this, testBeats, { line: lineHandler }).start();
+            }
             if (Input.Keyboard.JustDown(this.darknessKey)) {
                 this.darknessEnabled = !this.darknessEnabled;
                 this.darkness.setDarkness(this.darknessEnabled ? 0.9 : 0, 1, 250);
@@ -437,6 +483,12 @@ export default class TempleScene extends Scene {
         this.updatePortal(delta);
 
         this.hud.update();
+        if (DEBUG_KEYS && this.debugStoryRunner && !this.debugStoryRunner.isDone) {
+            this.debugStoryRunner.update(delta / 1000);
+        }
+        if (DEBUG_KEYS && this.worldBubble) {
+            this.worldBubble.update(delta / 1000);
+        }
 
         if (this.player.isGameOver && !this.gameOverShown) {
             this.triggerGameOver();

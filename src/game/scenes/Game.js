@@ -4,7 +4,7 @@ import HealthOrb from '../entities/HealthOrb';
 import Player from '../entities/Player';
 import DarknessOverlay from '../fx/DarknessOverlay';
 import PlayerHud from '../ui/PlayerHud';
-import { DEBUG_KEYS, HEALTH_ORB, HERO_PUNCH, PORTAL, TEMPLE_WAVE } from '../config/animationData';
+import { DEBUG_KEYS, HEALTH_ORB, PORTAL, TEMPLE_WAVE } from '../config/animationData';
 
 export default class TempleScene extends Scene {
     constructor() {
@@ -57,13 +57,14 @@ export default class TempleScene extends Scene {
         this.player = new Player(this, 180, 610);
         this.darkness = new DarknessOverlay(this, this.player, {
             alpha: 0.9,
-            lightScale: 1,
+            lightScale: 1.35,
             fogWorldWidth: worldWidth,
             fogScrollFactor: 0.6,
             fogAlpha: 0.16,
         });
         this.darknessEnabled = true;
         this.darknessKey = this.input.keyboard.addKey('F2');
+        this.restartKey = this.input.keyboard.addKey('R');
         this.physics.add.collider(this.player.sprite, this.floor);
         this.physics.add.collider(this.player.sprite, this.leftWall);
         this.physics.add.collider(this.player.sprite, this.rightWall);
@@ -109,12 +110,6 @@ export default class TempleScene extends Scene {
             });
         }
 
-        this.input.keyboard.on('keydown-R', () => {
-            if (!this.gameOverText || !this.gameOverText.active) {
-                return;
-            }
-            this.scene.restart();
-        });
         this.events.once('shutdown', () => {
             if (this.hud) {
                 this.hud.destroy();
@@ -443,6 +438,9 @@ export default class TempleScene extends Scene {
         if (this.player.isGameOver && !this.gameOverShown) {
             this.triggerGameOver();
         }
+        if (this.gameOverText && this.gameOverText.active && Input.Keyboard.JustDown(this.restartKey)) {
+            this.scene.restart();
+        }
 
     }
 
@@ -464,9 +462,23 @@ export default class TempleScene extends Scene {
         const body = this.player.sprite.body;
         this.drawDebugRect(body.x, body.y, body.width, body.height, 0x36ff70);
         if (this.player.hitBoxActive) {
-            const hitX = this.player.hitBoxDir > 0 ? this.player.sprite.x - 10 : this.player.sprite.x - HERO_PUNCH.reach;
-            this.drawDebugRect(hitX, this.player.hitBoxY - HERO_PUNCH.vertical, HERO_PUNCH.reach, HERO_PUNCH.vertical * 2, 0xffe336);
+            this.drawDebugRect(
+                this.player.hitBoxX,
+                this.player.hitBoxY - this.player.hitBoxHeight / 2,
+                this.player.hitBoxWidth,
+                this.player.hitBoxHeight,
+                0xffe336,
+            );
         }
+        this.player.fireballs.forEach((ball) => {
+            if (!ball.active) {
+                return;
+            }
+            this.debugGraphics.lineStyle(2, 0xff9b32, 1);
+            this.debugGraphics.beginPath();
+            this.debugGraphics.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            this.debugGraphics.strokePath();
+        });
         graphics.fillStyle(0xffffff, 1);
         graphics.fillEllipse(body.center.x, body.bottom, 4, 4);
         this.enemies.forEach((enemy) => {

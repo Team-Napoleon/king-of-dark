@@ -22,6 +22,8 @@ export default class KingOfDark {
         this.currentAttack = null;
         this.attackElapsed = 0;
         this.attackFrame = 0;
+        this.attackFrameOptions = { loop: false, speed: 1 };
+        this.loopFrameOptions = { speed: 1 };
         this.attackDir = 1;
         this.attackLandX = 0;
         this.attackTeleported = false;
@@ -43,9 +45,9 @@ export default class KingOfDark {
         this.sprite.body.setCollideWorldBounds(true);
 
         this.visual = scene.add.sprite(x, y + KING.body.height / 2, 'king-idle', 0).setDepth(6);
-        this.aura = scene.add.ellipse(x, y, 130, 170, 0x6126a8, 0.2).setDepth(4);
-        this.eyeLeft = scene.add.ellipse(x - 15, y + 20, 12, 6, 0xa76bff, 0.9).setDepth(52);
-        this.eyeRight = scene.add.ellipse(x + 15, y + 20, 12, 6, 0xa76bff, 0.9).setDepth(52);
+        this.aura = scene.add.ellipse(x, y, 260, 340, 0x6126a8, 0.2).setDepth(4);
+        this.eyeLeft = scene.add.ellipse(x - 30, y + 40, 24, 12, 0xa76bff, 0.9).setDepth(52);
+        this.eyeRight = scene.add.ellipse(x + 30, y + 40, 24, 12, 0xa76bff, 0.9).setDepth(52);
         this.attackMarker = scene.add.graphics().setDepth(52).setVisible(false);
         this.deathCircle = scene.add.circle(x, y, 1, 0x000000, 1)
             .setDepth(120)
@@ -135,7 +137,9 @@ export default class KingOfDark {
             const player = this.scene.player;
             const heroX = player && player.sprite && player.sprite.active ? player.sprite.x : this.sprite.x;
             const heroFacing = player ? player.facing : 1;
-            this.attackLandX = PhaserMath.Clamp(heroX - heroFacing * attack.landDistance, KING.arenaMinX, KING.arenaMaxX);
+            const minLandX = KING.wallLeft + KING.body.width / 2;
+            const maxLandX = KING.wallRight - KING.body.width / 2;
+            this.attackLandX = PhaserMath.Clamp(heroX - heroFacing * attack.landDistance, minLandX, maxLandX);
             this.attackDir = Math.sign(heroX - this.attackLandX) || 1;
             this.swordCooldown = attack.cooldown;
         } else {
@@ -255,7 +259,8 @@ export default class KingOfDark {
         const speed = this.phaseTwo ? KING.phase2Speed : 1;
         const oldFrame = this.attackFrame;
         this.attackElapsed += seconds;
-        this.attackFrame = frameAt(attack.sheet, this.attackElapsed, { loop: false, speed });
+        this.attackFrameOptions.speed = speed;
+        this.attackFrame = frameAt(attack.sheet, this.attackElapsed, this.attackFrameOptions);
 
         if (this.currentAttackName === 'sword') {
             if (!this.attackTeleported && oldFrame < attack.teleportFrame && this.attackFrame >= attack.teleportFrame) {
@@ -310,23 +315,23 @@ export default class KingOfDark {
         const frame = this.attackFrame;
         this.attackMarker.clear();
         if (this.currentAttackName === 'sword' && frame <= attack.markerEnd) {
-            this.attackMarker.setPosition(this.attackLandX, KING.floorY - 4);
-            this.attackMarker.lineStyle(3, 0xb36cff, 0.8 + (Math.sin(this.elapsed * 16) + 1) * 0.1);
+            this.attackMarker.setPosition(this.attackLandX, KING.floorY - 8);
+            this.attackMarker.lineStyle(6, 0xb36cff, 0.8 + (Math.sin(this.elapsed * 16) + 1) * 0.1);
             this.attackMarker.beginPath();
-            this.attackMarker.arc(0, 0, 24 + (frame < 7 ? Math.sin(this.elapsed * 18) * 4 : 0), 0, Math.PI * 2);
+            this.attackMarker.arc(0, 0, 48 + (frame < 7 ? Math.sin(this.elapsed * 18) * 8 : 0), 0, Math.PI * 2);
             this.attackMarker.strokePath();
             this.attackMarker.fillStyle(0x843bce, 0.12);
-            this.attackMarker.fillEllipse(0, 0, 48, 8);
+            this.attackMarker.fillEllipse(0, 0, 96, 16);
             this.attackMarker.setVisible(true);
         } else if (this.currentAttackName === 'tendril' && frame <= attack.markerEnd) {
-            this.attackMarker.setPosition(this.sprite.x, KING.floorY - 2);
+            this.attackMarker.setPosition(this.sprite.x, KING.floorY - 4);
             this.attackMarker.lineStyle(4, 0xff4040, 0.8 + (Math.sin(this.elapsed * 16) + 1) * 0.1);
             this.attackMarker.beginPath();
             this.attackMarker.arc(0, 0, attack.radius, 0, Math.PI * 2);
             this.attackMarker.strokePath();
             this.attackMarker.setVisible(true);
         } else if (this.currentAttackName === 'void' && frame <= attack.markerEnd) {
-            this.attackMarker.setPosition(this.sprite.x, KING.floorY - 2);
+            this.attackMarker.setPosition(this.sprite.x, KING.floorY - 4);
             const radius = attack.radius * Math.min(1, frame / 14);
             this.attackMarker.lineStyle(4, 0x9e5cff, 0.8);
             this.attackMarker.beginPath();
@@ -354,21 +359,23 @@ export default class KingOfDark {
         } else if (this.state === 'approach' && Math.abs(this.sprite.body.velocity.x) > 1) {
             const distance = this.scene.player ? Math.abs(this.scene.player.sprite.x - this.sprite.x) : 0;
             key = distance > KING.runBeyond ? 'king-run' : 'king-walk';
-            frame = frameAt(key, this.elapsed, { speed: this.phaseTwo ? KING.phase2Speed : 1 });
+            this.loopFrameOptions.speed = this.phaseTwo ? KING.phase2Speed : 1;
+            frame = frameAt(key, this.elapsed, this.loopFrameOptions);
         } else {
             frame = frameAt(key, elapsed);
         }
 
         if (this.currentAttack && this.currentAttack.sheet === key) {
-            frame = frameAt(key, elapsed, { loop: false, speed });
+            this.attackFrameOptions.speed = speed;
+            frame = frameAt(key, elapsed, this.attackFrameOptions);
         }
         showFrame(this.visual, key, frame, this.facing);
         this.visual.setPosition(this.sprite.x, this.sprite.y + KING.body.height / 2);
         this.visual.setVisible(!this.visualHidden);
         this.aura.setPosition(this.sprite.x, this.sprite.y + 5);
         this.aura.setAlpha(0.14 + (Math.sin(this.elapsed * 4) + 1) * 0.06);
-        this.eyeLeft.setPosition(this.sprite.x - 15, this.sprite.y + 20);
-        this.eyeRight.setPosition(this.sprite.x + 15, this.sprite.y + 20);
+        this.eyeLeft.setPosition(this.sprite.x - 30, this.sprite.y + 40);
+        this.eyeRight.setPosition(this.sprite.x + 30, this.sprite.y + 40);
         if (this.flashTimer > 0) {
             this.visual.setTint(0xffffff).setTintMode(TintModes.FILL);
         } else if (this.phaseTwo) {
@@ -378,11 +385,11 @@ export default class KingOfDark {
         }
     }
 
-    flashEyes() {
+    flashEyes(duration = KING.eyeFlashDuration) {
         if (!this.eyeLeft || !this.eyeLeft.active || !this.eyeRight || !this.eyeRight.active) {
             return;
         }
-        this.eyeFlashTimer = KING.eyeFlashDuration;
+        this.eyeFlashTimer = duration;
         this.eyeLeft.setFillStyle(0xf4e9ff, 1);
         this.eyeRight.setFillStyle(0xf4e9ff, 1);
     }

@@ -1,11 +1,11 @@
-import { Input, TintModes } from 'phaser';
-import { frameAt, HERO_FEEDBACK, HERO_KEYS, HERO_MOVES, HERO_PHYSICS, HERO_PUNCH, SHADOW, showFrame } from '../config/animationData';
+import { BlendModes, Input, TintModes } from 'phaser';
+import { frameAt, HERO_FEEDBACK, HERO_KEYS, HERO_MOVES, HERO_PHYSICS, HERO_PUNCH, HERO_STAND_PX, NEW_HERO_MOVES, NEW_HERO_SHEETS, SHADOW, SHEETS, showFrame } from '../config/animationData';
 
 export default class Player {
     constructor(scene, x, y) {
         this.scene = scene;
         this.sprite = scene.add.sprite(x, y, 'hero-walk', 0);
-        this.sprite.setScale(0.72);
+        this.sprite.setScale(HERO_STAND_PX / 118);
         this.sprite.setOrigin(0.5, 0.7);
         this.sprite.setVisible(false);
 
@@ -20,7 +20,7 @@ export default class Player {
         body.setBounce(0);
 
         this.visual = scene.add.sprite(x, y, 'hero-walk', 0).setDepth(5);
-        this.shadowAura = scene.add.ellipse(x, y, 66, 24, 0x7d36c8, 0.32)
+        this.shadowAura = scene.add.ellipse(x, y, 132, 48, 0x7d36c8, 0.32)
             .setDepth(4)
             .setVisible(false);
 
@@ -47,34 +47,56 @@ export default class Player {
         this.hitBoxX = 0;
         this.hitBoxY = 0;
         this.hitBoxDir = 0;
+        this.hitBoxWidth = 0;
+        this.hitBoxHeight = 0;
         this.hitBoxActive = false;
         this.isGrounded = false;
+        this.fireCooldown = 0;
 
         this.keys = scene.input.keyboard.addKeys({
             left: 'A',
             right: 'D',
             jump: 'SPACE',
             up: 'UP',
-            punchLeft: HERO_KEYS.punchLeft,
-            punchRight: HERO_KEYS.punchRight,
+            punch: HERO_KEYS.punch,
             combo: HERO_KEYS.combo,
+            kick: HERO_KEYS.kick,
+            sword: HERO_KEYS.sword,
+            fire: HERO_KEYS.fire,
             portalEnter: HERO_KEYS.portalEnter,
         });
         this.cursors = scene.input.keyboard.createCursorKeys();
 
         this.hitSparks = Array.from({ length: 8 }, () => {
-            const spark = scene.add.circle(0, 0, 8, 0xffffff, 0)
-                .setStrokeStyle(2, 0xffffff, 1)
+            const spark = scene.add.circle(0, 0, 16, 0xffffff, 0)
+                .setStrokeStyle(4, 0xffffff, 1)
                 .setDepth(52)
                 .setVisible(false);
             spark.life = 0;
             return spark;
         });
-        this.curseBreakRing = scene.add.circle(0, 0, 24, 0xffffff, 0)
-            .setStrokeStyle(3, 0xffffff, 1)
+        this.curseBreakRing = scene.add.circle(0, 0, 48, 0xffffff, 0)
+            .setStrokeStyle(6, 0xffffff, 1)
             .setDepth(52)
             .setVisible(false);
         this.curseBreakRing.life = 0;
+        this.fireballs = Array.from({ length: 3 }, () => ({
+            graphic: scene.add.graphics().setDepth(6).setBlendMode(BlendModes.ADD).setVisible(false),
+            active: false,
+            x: 0,
+            y: 0,
+            dir: 1,
+            speed: 0,
+            range: 0,
+            travelled: 0,
+            radius: 0,
+            damage: 0,
+            knockback: 0,
+            stun: 0,
+            pierce: true,
+            visibleDelay: 0,
+            hitSet: new Set(),
+        }));
 
         scene.events.once('shutdown', () => {
             if (!this.visual || !this.visual.active) {
@@ -98,13 +120,18 @@ export default class Player {
         const left = this.keys.left.isDown || this.cursors.left.isDown;
         const right = this.keys.right.isDown || this.cursors.right.isDown;
         const jumpPressed = Input.Keyboard.JustDown(this.keys.jump) || Input.Keyboard.JustDown(this.cursors.up);
-        const leftPressed = Input.Keyboard.JustDown(this.keys.punchLeft);
-        const rightPressed = Input.Keyboard.JustDown(this.keys.punchRight);
+        const punchPressed = Input.Keyboard.JustDown(this.keys.punch);
         const comboPressed = Input.Keyboard.JustDown(this.keys.combo);
+        const kickPressed = Input.Keyboard.JustDown(this.keys.kick);
+        const swordPressed = Input.Keyboard.JustDown(this.keys.sword);
+        const firePressed = Input.Keyboard.JustDown(this.keys.fire);
+        const movePressCount = Number(punchPressed) + Number(comboPressed) + Number(kickPressed) + Number(swordPressed) + Number(firePressed);
 
         this.invulnerableTimer = Math.max(0, this.invulnerableTimer - step);
         this.flashTimer = Math.max(0, this.flashTimer - step);
         this.attackEndLag = Math.max(0, this.attackEndLag - step);
+        this.fireCooldown = Math.max(0, this.fireCooldown - step);
+        this.updateFireballs(step);
         if (this.bufferTimer > 0) {
             this.bufferTimer = Math.max(0, this.bufferTimer - step);
             if (this.bufferTimer === 0) {
@@ -119,21 +146,26 @@ export default class Player {
             }
         }
 
-        if (leftPressed || rightPressed || comboPressed) {
-            if (this.isShadowed) {
-                const pressCount = Number(leftPressed) + Number(rightPressed) + Number(comboPressed);
+        if (movePressCount > 0) {
+            const curseBreakPressCount = Number(punchPressed) + Number(comboPressed);
+            if (this.isShadowed && curseBreakPressCount > 0) {
                 this.shadowMeter = Math.min(
                     SHADOW.breakThreshold,
-                    this.shadowMeter + SHADOW.breakPerPress * pressCount,
+                    this.shadowMeter + SHADOW.breakPerPress * curseBreakPressCount,
                 );
                 if (this.shadowMeter >= SHADOW.breakThreshold) {
                     this.breakShadowCurse();
                 }
             }
             if (!this.controlsLocked && !this.isGameOver) {
-                const moveName = comboPressed ? 'combo' : rightPressed ? 'punchRight' : 'punchLeft';
-                this.bufferedMove = moveName;
-                this.bufferTimer = 0.25;
+                const moveName = punchPressed ? 'punch'
+                    : comboPressed ? 'combo'
+                        : kickPressed ? 'kick'
+                            : swordPressed ? 'sword' : 'fire';
+                if (moveName !== 'fire' || this.fireCooldown === 0) {
+                    this.bufferedMove = moveName;
+                    this.bufferTimer = HERO_FEEDBACK.attackBuffer;
+                }
             }
         }
 
@@ -146,18 +178,16 @@ export default class Player {
             return;
         }
 
-        this.updateAttack(step);
-        const activeDir = this.attack ? this.attack.move.steps[this.attack.stepIndex] : 0;
         const axis = left === right ? 0 : left ? -1 : 1;
-        const speed = this.moveSpeed * (this.attack ? 0.4 : 1) * (this.isShadowed ? SHADOW.speedMult : 1);
-        body.setVelocityX(axis * speed);
-        if (activeDir) {
-            this.facing = activeDir;
-        } else if (axis !== 0) {
+        if (!this.attack && axis !== 0) {
             this.facing = axis;
         }
+        this.updateAttack(step);
+        const speed = this.moveSpeed * (this.attack ? (this.attack.move.moveMult ?? 0.4) : 1) * (this.isShadowed ? SHADOW.speedMult : 1);
+        body.setVelocityX(axis * speed);
 
-        if (jumpPressed && (body.blocked.down || body.touching.down)) {
+        const jumpLocked = this.attack && ['kick', 'sword', 'fire'].includes(this.attack.moveName);
+        if (jumpPressed && !jumpLocked && (body.blocked.down || body.touching.down)) {
             body.setVelocityY(this.jumpVelocity);
             this.isGrounded = false;
         }
@@ -167,13 +197,22 @@ export default class Player {
     }
 
     startAttack(moveName) {
-        const move = HERO_MOVES[moveName];
-        if (!move || this.controlsLocked || this.isGameOver) {
+        const move = NEW_HERO_MOVES[moveName] || HERO_MOVES[moveName];
+        if (!move || this.controlsLocked || this.isGameOver || (moveName === 'fire' && this.fireCooldown > 0)) {
             return false;
         }
-        this.attack = { moveName, move, stepIndex: 0, t: 0, hitSet: new Set() };
-        this.facing = move.steps[0];
-        this.currentClip = 'hero-punch';
+        this.attack = {
+            moveName,
+            move,
+            dir: this.facing,
+            stepIndex: 0,
+            t: 0,
+            frame: 0,
+            frameOptions: { loop: false, speed: move.speed ?? 1 },
+            hitSet: new Set(),
+            projectileSpawned: false,
+        };
+        this.currentClip = move.sheet;
         this.clipElapsed = 0;
         this.hitBoxActive = false;
         return true;
@@ -191,61 +230,167 @@ export default class Player {
         }
 
         this.attack.t += delta;
-        const frame = frameAt('hero-punch', this.attack.t, { loop: false });
-        this.hitBoxActive = frame >= HERO_PUNCH.activeStart && frame <= HERO_PUNCH.activeEnd;
+        const attack = this.attack;
+        attack.frameOptions.speed = attack.move.speed ?? 1;
+        const frame = frameAt(attack.move.sheet, attack.t, attack.frameOptions);
+        attack.frame = frame;
+        const activeStart = attack.move.activeStart ?? HERO_PUNCH.activeStart;
+        const activeEnd = attack.move.activeEnd ?? HERO_PUNCH.activeEnd;
+        this.hitBoxActive = attack.moveName !== 'fire' && frame >= activeStart && frame <= activeEnd;
         if (this.hitBoxActive) {
-            this.applyPunchHits(this.attack, this.attack.move.steps[this.attack.stepIndex]);
+            this.applyMoveHits(attack, this.attackDir(attack));
         }
 
-        const isLastStep = this.attack.stepIndex === this.attack.move.steps.length - 1;
-        if (isLastStep && frame >= HERO_PUNCH.cancelFrom && this.bufferedMove && this.bufferTimer > 0) {
+        if (attack.moveName === 'fire' && !attack.projectileSpawned && frame >= attack.move.releaseFrame) {
+            attack.projectileSpawned = true;
+            this.spawnFireball(attack);
+        }
+
+        const isCombo = attack.moveName === 'combo';
+        const isLastStep = !isCombo || attack.stepIndex >= 1;
+        const cancelFrom = attack.move.cancelFrom ?? HERO_PUNCH.cancelFrom;
+        if (isLastStep && frame >= cancelFrom && this.bufferedMove && this.bufferTimer > 0) {
             const moveName = this.bufferedMove;
             this.bufferedMove = null;
             this.bufferTimer = 0;
-            this.startAttack(moveName);
-            return;
+            if (this.startAttack(moveName)) {
+                return;
+            }
         }
 
-        if (this.attack.t >= HERO_PUNCH.frames / HERO_PUNCH.fps) {
-            if (!isLastStep) {
-                this.attack.stepIndex += 1;
-                this.attack.t = 0;
-                this.attack.hitSet.clear();
-                this.facing = this.attack.move.steps[this.attack.stepIndex];
+        const sheet = SHEETS[attack.move.sheet] || NEW_HERO_SHEETS[attack.move.sheet];
+        if (attack.t >= sheet.frames / sheet.fps / (attack.move.speed ?? 1)) {
+            if (isCombo && !isLastStep) {
+                attack.stepIndex = 1;
+                attack.t = 0;
+                attack.frame = 0;
+                attack.hitSet.clear();
             } else {
-                this.attackEndLag = this.attack.move.endLag ?? 0;
+                this.attackEndLag = attack.move.endLag ?? 0;
                 this.attack = null;
                 this.hitBoxActive = false;
             }
         }
     }
 
-    applyPunchHits(attack, dir) {
+    attackDir(attack) {
+        return attack.moveName === 'combo' && attack.stepIndex === 1 ? -attack.dir : attack.dir;
+    }
+
+    applyMoveHits(attack, dir) {
         if (!attack || !this.sprite || !this.sprite.active) {
             return;
         }
         const enemies = this.scene.enemies || [];
         const heroX = this.sprite.body.center.x;
         const heroY = this.sprite.body.center.y;
-        this.hitBoxX = heroX + dir * (HERO_PUNCH.reach * 0.5);
+        const sheet = SHEETS[attack.move.sheet] || NEW_HERO_SHEETS[attack.move.sheet];
+        const scale = attack.move.reachSrc ? HERO_STAND_PX / sheet.figureHeight : 1;
+        const reach = attack.move.reachSrc ? attack.move.reachSrc * scale : HERO_PUNCH.reach;
+        const vertical = attack.move.verticalSrc ? attack.move.verticalSrc * scale : HERO_PUNCH.vertical;
+        const startInset = 10 * scale;
+        this.hitBoxX = dir > 0 ? heroX - startInset : heroX - reach;
         this.hitBoxY = heroY;
         this.hitBoxDir = dir;
+        this.hitBoxWidth = reach + startInset;
+        this.hitBoxHeight = vertical * 2;
 
-        enemies.forEach((enemy) => {
+        for (let index = 0; index < enemies.length; index += 1) {
+            const enemy = enemies[index];
             if (!enemy || enemy.isDefeated || enemy.untargetable || !enemy.sprite || !enemy.sprite.active || attack.hitSet.has(enemy)) {
-                return;
+                continue;
             }
-            const dx = enemy.sprite.x - this.sprite.x;
+            const enemyX = enemy.sprite.body ? enemy.sprite.body.center.x : enemy.sprite.x;
+            const dx = enemyX - heroX;
             const enemyY = enemy.sprite.body ? enemy.sprite.body.center.y : enemy.sprite.y;
-            const reachesNearEdge = dx * dir > -10 && dx * dir - (enemy.hitHalfWidth ?? 30) <= HERO_PUNCH.reach;
-            const verticalOverlap = Math.abs(enemyY - heroY) <= HERO_PUNCH.vertical + (enemy.hitHalfHeight ?? 26);
+            const reachesNearEdge = dx * dir > -startInset && dx * dir - (enemy.hitHalfWidth ?? 30) <= reach;
+            const verticalOverlap = Math.abs(enemyY - heroY) <= vertical + (enemy.hitHalfHeight ?? 26);
             if (reachesNearEdge && verticalOverlap) {
                 attack.hitSet.add(enemy);
                 const damage = Math.round(attack.move.damage * (this.isShadowed ? SHADOW.damageMult : 1));
-                enemy.applyDamage(damage, this.sprite.x);
-                this.spawnHitSpark(enemy.sprite.x, enemyY, this.isShadowed ? 0xc084ff : 0xffffff);
+                enemy.applyDamage(damage, this.sprite.x, attack.move.knockback, attack.move.stun);
+                this.spawnHitSpark(enemyX, enemyY, this.isShadowed ? 0xc084ff : 0xffffff);
             }
-        });
+        }
+    }
+
+    spawnFireball(attack) {
+        const ball = this.fireballs.find((candidate) => !candidate.active);
+        if (!ball || !ball.graphic || !ball.graphic.active) {
+            return;
+        }
+        const config = attack.move.projectile;
+        const scale = HERO_STAND_PX / NEW_HERO_SHEETS[attack.move.sheet].figureHeight;
+        const body = this.sprite.body;
+        ball.active = true;
+        ball.dir = attack.dir;
+        ball.x = body.center.x + attack.dir * config.muzzleSrc * scale;
+        ball.y = body.bottom - HERO_STAND_PX * 0.42;
+        ball.speed = config.speedSrc * scale;
+        ball.range = config.rangeSrc * scale;
+        ball.travelled = 0;
+        ball.radius = config.radiusSrc * scale;
+        ball.damage = config.damage;
+        ball.knockback = config.knockback;
+        ball.stun = config.stun;
+        ball.pierce = config.pierce;
+        ball.visibleDelay = Math.max(0, config.visibleFromFrame - config.spawnFrame) / (NEW_HERO_SHEETS[attack.move.sheet].fps * attack.move.speed);
+        ball.hitSet.clear();
+        this.fireCooldown = attack.move.cooldown;
+        ball.graphic.setVisible(ball.visibleDelay === 0);
+    }
+
+    updateFireballs(delta) {
+        for (let index = 0; index < this.fireballs.length; index += 1) {
+            const ball = this.fireballs[index];
+            if (!ball.active || !ball.graphic || !ball.graphic.active) {
+                continue;
+            }
+            const distance = ball.speed * delta;
+            ball.x += ball.dir * distance;
+            ball.travelled += distance;
+            ball.visibleDelay = Math.max(0, ball.visibleDelay - delta);
+            ball.graphic.setVisible(ball.visibleDelay === 0);
+            if (ball.visibleDelay === 0) {
+                ball.graphic.clear();
+                ball.graphic.lineStyle(Math.max(2, ball.radius * 0.35), 0xff6b22, 0.55);
+                ball.graphic.beginPath();
+                ball.graphic.moveTo(ball.x - ball.dir * ball.radius * 1.8, ball.y);
+                ball.graphic.lineTo(ball.x, ball.y);
+                ball.graphic.strokePath();
+                ball.graphic.fillStyle(0xff9b32, 0.9);
+                ball.graphic.fillCircle(ball.x, ball.y, ball.radius);
+                ball.graphic.fillStyle(0xffe3a1, 0.95);
+                ball.graphic.fillCircle(ball.x, ball.y, ball.radius * 0.45);
+            }
+
+            const enemies = this.scene.enemies || [];
+            for (let enemyIndex = 0; enemyIndex < enemies.length; enemyIndex += 1) {
+                const enemy = enemies[enemyIndex];
+                if (!enemy || enemy.isDefeated || enemy.untargetable || !enemy.sprite || !enemy.sprite.active || ball.hitSet.has(enemy)) {
+                    continue;
+                }
+                const targetX = enemy.sprite.body ? enemy.sprite.body.center.x : enemy.sprite.x;
+                const targetY = enemy.sprite.body ? enemy.sprite.body.center.y : enemy.sprite.y;
+                const halfWidth = enemy.hitHalfWidth ?? 0;
+                const halfHeight = enemy.hitHalfHeight ?? 0;
+                if (Math.abs(targetX - ball.x) > ball.radius + halfWidth || Math.abs(targetY - ball.y) > ball.radius + halfHeight) {
+                    continue;
+                }
+                ball.hitSet.add(enemy);
+                const damage = Math.round(ball.damage * (this.isShadowed ? SHADOW.damageMult : 1));
+                enemy.applyDamage(damage, this.sprite.x, ball.knockback, ball.stun);
+                this.spawnHitSpark(targetX, targetY, 0xff9b32);
+                if (!ball.pierce) {
+                    ball.travelled = ball.range;
+                }
+            }
+
+            if (ball.travelled >= ball.range) {
+                ball.active = false;
+                ball.graphic.setVisible(false);
+            }
+        }
     }
 
     spawnHitSpark(x, y, color) {
@@ -254,10 +399,10 @@ export default class Player {
             return;
         }
         spark.setPosition(x, y);
-        spark.setStrokeStyle(2, color, 1);
+        spark.setStrokeStyle(4, color, 1);
         spark.setAlpha(1);
         spark.setVisible(true);
-        spark.life = 0.18;
+        spark.life = HERO_FEEDBACK.hitSparkLife;
     }
 
     spawnCurseBreakRing(x, y) {
@@ -265,23 +410,24 @@ export default class Player {
             return;
         }
         this.curseBreakRing.setPosition(x, y);
-        this.curseBreakRing.setStrokeStyle(3, 0xffffff, 1);
+        this.curseBreakRing.setStrokeStyle(6, 0xffffff, 1);
         this.curseBreakRing.setAlpha(1);
         this.curseBreakRing.setVisible(true);
         this.curseBreakRing.life = 0.4;
     }
 
     updateEffects(delta) {
-        this.hitSparks.forEach((spark) => {
+        for (let index = 0; index < this.hitSparks.length; index += 1) {
+            const spark = this.hitSparks[index];
             if (!spark || !spark.active || spark.life <= 0) {
-                return;
+                continue;
             }
             spark.life = Math.max(0, spark.life - delta);
             spark.setAlpha(spark.life / 0.18);
             if (spark.life === 0) {
                 spark.setVisible(false);
             }
-        });
+        }
         if (this.curseBreakRing && this.curseBreakRing.active && this.curseBreakRing.life > 0) {
             this.curseBreakRing.life = Math.max(0, this.curseBreakRing.life - delta);
             this.curseBreakRing.setAlpha(this.curseBreakRing.life / 0.4);
@@ -320,9 +466,9 @@ export default class Player {
         let facing = this.facing;
 
         if (this.attack) {
-            key = 'hero-punch';
-            facing = this.attack.move.steps[this.attack.stepIndex];
-            frame = frameAt(key, this.attack.t, { loop: false });
+            key = this.attack.move.sheet;
+            facing = this.attackDir(this.attack);
+            frame = this.attack.frame;
         } else if (this.forcedWalkDirection !== 0 && Math.abs(body.velocity.x) > 8) {
             key = 'hero-run';
             facing = this.forcedWalkDirection;
@@ -343,7 +489,7 @@ export default class Player {
 
         showFrame(this.visual, key, frame, facing);
         this.visual.setPosition(body.center.x, body.bottom);
-        this.shadowAura.setPosition(body.center.x, body.bottom + 3);
+        this.shadowAura.setPosition(body.center.x, body.bottom + 6);
         this.shadowAura.setVisible(this.isShadowed);
         if (this.flashTimer > 0) {
             this.visual.setTint(0xff5b68).setTintMode(TintModes.FILL);
@@ -395,7 +541,7 @@ export default class Player {
     }
 
     destroy() {
-        [this.sprite, this.visual, this.shadowAura, this.curseBreakRing, ...this.hitSparks].forEach((object) => {
+        [this.sprite, this.visual, this.shadowAura, this.curseBreakRing, ...this.hitSparks, ...this.fireballs.map((ball) => ball.graphic)].forEach((object) => {
             if (object && object.active) {
                 object.destroy();
             }

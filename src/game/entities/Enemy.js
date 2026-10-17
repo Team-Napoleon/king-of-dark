@@ -1,15 +1,20 @@
 import { BlendModes, Math as PhaserMath } from 'phaser';
-import { ENEMY_TYPES, SHADOW, TEMPLE_WAVE } from '../config/animationData';
+import { ENEMY_TYPES, GLOAM, GLOAM_SHEETS, HERO_PHYSICS, HERO_STAND_PX, SHADOW, TEMPLE_WAVE, frameAt, showFrame } from '../config/animationData';
 
 export default class Enemy {
-    constructor(scene, x, y, type = 'imp') {
+    constructor(scene, x, y, type = 'gloam') {
         this.scene = scene;
         this.type = type;
         this.config = ENEMY_TYPES[type];
         this.maxHealth = this.config.hp;
         this.health = this.maxHealth;
-        this.hitHalfWidth = this.config.hitHalfWidth;
-        this.hitHalfHeight = this.config.hitHalfHeight;
+        this.renderedHeight = type === 'gloam' ? HERO_STAND_PX * GLOAM.heightRatio : this.config.height;
+        this.width = type === 'gloam' ? this.renderedHeight * GLOAM_SHEETS['gloam-run'].frameWidth / GLOAM_SHEETS['gloam-run'].figureHeight : this.config.width;
+        this.height = type === 'gloam' ? this.renderedHeight : this.config.height;
+        this.bodyWidth = type === 'gloam' ? this.width * GLOAM.bodyWidthRatio : this.width;
+        this.bodyHeight = type === 'gloam' ? this.height * GLOAM.bodyHeightRatio : this.height;
+        this.hitHalfWidth = type === 'gloam' ? this.width * GLOAM.hitHalfWidthRatio : this.config.hitHalfWidth;
+        this.hitHalfHeight = type === 'gloam' ? this.height * GLOAM.hitHalfHeightRatio : this.config.hitHalfHeight;
         this.isDefeated = false;
         this.untargetable = true;
         this.inUse = false;
@@ -25,10 +30,21 @@ export default class Enemy {
         this.elapsed = 0;
         this.visualAlpha = 0;
         this.facing = -1;
+        this.clip = 'idle';
+        this.clipElapsed = 0;
+        this.snatchElapsed = 0;
+        this.snatchFrame = 0;
+        this.previousSnatchFrame = 0;
+        this.snatchTimer = 0;
+        this.snatchBursted = false;
+        this.snatchFrameOptions = { loop: false, speed: GLOAM.snatch.speed };
+        this.gloamFrameOptions = { from: 0, to: 17, loop: true, pingpong: true, speed: 1 };
+        this.patrolOrigin = x;
+        this.gloamScale = this.type === 'gloam' ? HERO_STAND_PX * GLOAM.heightRatio / GLOAM_SHEETS['gloam-run'].figureHeight : 1;
 
-        this.sprite = scene.add.rectangle(x, y, this.config.width, this.config.height, 0, 0).setVisible(false);
+        this.sprite = scene.add.rectangle(x, y, this.bodyWidth, this.bodyHeight, 0, 0).setVisible(false);
         scene.physics.add.existing(this.sprite);
-        this.sprite.body.setSize(this.config.width, this.config.height);
+        this.sprite.body.setSize(this.bodyWidth, this.bodyHeight);
         this.sprite.body.setAllowGravity(true);
         this.sprite.body.setImmovable(false);
         this.sprite.body.setCollideWorldBounds(false);
@@ -36,20 +52,22 @@ export default class Enemy {
         this.sprite.body.enable = false;
 
         this.aura = scene.add.graphics().setDepth(4).setBlendMode(BlendModes.ADD).setVisible(false);
-        this.visual = scene.add.graphics().setDepth(5).setVisible(false);
+        this.visual = type === 'gloam'
+            ? scene.add.sprite(x, y, 'gloam-run', 0).setDepth(5).setVisible(false)
+            : scene.add.graphics().setDepth(5).setVisible(false);
         this.readable = scene.add.graphics().setDepth(52).setVisible(false);
         this.castBurst = scene.add.ellipse(0, 0, 56, 56, 0x000000, 0)
             .setStrokeStyle(4, 0xc084ff, 1)
             .setDepth(52)
             .setVisible(false);
         this.castBurstTimer = 0;
-        this.meleeFlash = scene.add.rectangle(0, 0, this.config.melee.range * 2, 7, 0xffe066, 0.9)
+        this.meleeFlash = scene.add.rectangle(0, 0, (this.config.melee?.range ?? 0) * 2, 14, 0xffe066, 0.9)
             .setDepth(52)
             .setVisible(false);
-        this.healthBack = scene.add.rectangle(0, 0, this.config.width + 16, 6, 0x170d12, 0.95)
+        this.healthBack = scene.add.rectangle(0, 0, this.width + 16, 6, 0x170d12, 0.95)
             .setDepth(7)
             .setVisible(false);
-        this.healthBar = scene.add.rectangle(0, 0, this.config.width + 12, 4, 0x78e495)
+        this.healthBar = scene.add.rectangle(0, 0, this.width + 12, 4, 0x78e495)
             .setOrigin(0, 0.5)
             .setDepth(8)
             .setVisible(false);
@@ -72,7 +90,7 @@ export default class Enemy {
         this.untargetable = true;
         this.inUse = true;
         this.state = 'materialize';
-        this.stateTimer = TEMPLE_WAVE.materialize;
+        this.stateTimer = this.type === 'gloam' ? GLOAM.materialize : TEMPLE_WAVE.materialize;
         this.castTelegraphTimer = 0;
         this.meleeTimer = 0;
         this.meleeCooldown = 0;
@@ -85,6 +103,15 @@ export default class Enemy {
         this.castBurst.setVisible(false);
         this.counted = false;
         this.castTimer = 0;
+        this.clip = 'idle';
+        this.clipElapsed = 0;
+        this.snatchElapsed = 0;
+        this.snatchFrame = 0;
+        this.previousSnatchFrame = 0;
+        this.snatchBursted = false;
+        this.patrolOrigin = x;
+        this.snatchTimer = 0;
+        this.gloamScale = this.type === 'gloam' ? HERO_STAND_PX * GLOAM.heightRatio / GLOAM_SHEETS['gloam-run'].figureHeight : 1;
         [this.aura, this.visual, this.readable, this.healthBack, this.healthBar].forEach((object) => object.setVisible(true));
         this.meleeFlash.setVisible(false);
         this.redrawGraphics(null);
@@ -97,6 +124,10 @@ export default class Enemy {
 
     update(player, delta) {
         if (!this.inUse || this.isDefeated || !this.sprite || !this.sprite.active || !player || !player.sprite || !player.sprite.active) {
+            return;
+        }
+        if (this.type === 'gloam') {
+            this.updateGloam(player, delta);
             return;
         }
         const seconds = delta / 1000;
@@ -206,41 +237,216 @@ export default class Enemy {
         this.redrawGraphics(player);
     }
 
+    updateGloam(player, delta) {
+        const seconds = delta / 1000;
+        const body = this.sprite.body;
+        const heroBody = player.sprite.body;
+        const dx = heroBody.center.x - body.center.x;
+        const distance = Math.abs(dx);
+        const castRange = GLOAM.castRangeH * HERO_STAND_PX;
+        const aggroRange = GLOAM.aggroRangeH * HERO_STAND_PX;
+        this.elapsed += seconds;
+        this.flashTimer = Math.max(0, this.flashTimer - seconds);
+        this.castBurstTimer = Math.max(0, this.castBurstTimer - seconds);
+        if (this.castBurstTimer > 0) {
+            this.castBurst.setAlpha(this.castBurstTimer / 0.4);
+        }
+        if (this.castBurstTimer === 0 && this.castBurst.visible) {
+            this.castBurst.setVisible(false);
+        }
+        this.facing = dx < 0 ? -1 : 1;
+
+        if (this.state === 'materialize') {
+            this.stateTimer = Math.max(0, this.stateTimer - seconds);
+            this.visualAlpha = 1 - this.stateTimer / GLOAM.materialize;
+            if (this.stateTimer === 0) {
+                this.state = 'prowl';
+                this.untargetable = false;
+                this.visualAlpha = 1;
+                this.snatchTimer = GLOAM.snatch.first + this.jitter(GLOAM.snatch.jitter);
+            }
+            this.setGloamClip('idle', seconds, 1);
+            this.redrawGraphics(player);
+            return;
+        }
+
+        if (this.stunTimer > 0) {
+            this.stunTimer = Math.max(0, this.stunTimer - seconds);
+            body.setVelocityX(body.velocity.x * Math.pow(0.08, seconds));
+            this.state = 'stunned';
+            this.setGloamClip('idle', seconds, 1);
+            this.redrawGraphics(player);
+            return;
+        }
+
+        this.snatchTimer = Math.max(0, this.snatchTimer - seconds);
+        if (this.state === 'snatch') {
+            this.snatchElapsed += seconds;
+            this.previousSnatchFrame = this.snatchFrame;
+            this.snatchFrame = frameAt('gloam-snatch', this.snatchElapsed, this.snatchFrameOptions);
+            body.setVelocityX(0);
+            if (!this.snatchBursted && this.snatchFrame >= GLOAM.snatch.strikeFrame) {
+                this.snatchBursted = true;
+                const floorSurface = this.scene.floor ? this.scene.floor.y - this.scene.floor.height / 2 : heroBody.bottom;
+                const feetAboveFloor = floorSurface - heroBody.bottom;
+                const groundedEnough = Math.abs(feetAboveFloor) <= HERO_STAND_PX * 0.35;
+                if (distance <= GLOAM.snatchReachH * HERO_STAND_PX && groundedEnough) {
+                    player.applyShadowCurse(SHADOW.duration);
+                    this.castBurst.setPosition(heroBody.center.x, heroBody.center.y);
+                    this.castBurst.setAlpha(1).setVisible(true);
+                    this.castBurstTimer = 0.4;
+                    if (distance <= GLOAM.closeRangeH * HERO_STAND_PX) {
+                        player.takeDamage(GLOAM.snatch.closeDamage, body.center.x, this.config.knockback);
+                    }
+                }
+            }
+            if (this.snatchFrame >= GLOAM.snatch.lastFrame) {
+                this.state = 'idle';
+                this.snatchTimer = GLOAM.snatch.interval + this.jitter(GLOAM.snatch.jitter);
+                this.snatchElapsed = 0;
+                this.snatchFrame = 0;
+                this.snatchBursted = false;
+            }
+            this.redrawGraphics(player);
+            return;
+        }
+
+        if (distance > aggroRange) {
+            const patrolOffset = Math.sin(this.elapsed * 0.8) * 120;
+            const patrolTarget = this.patrolOrigin + patrolOffset;
+            const patrolDir = Math.sign(patrolTarget - body.center.x);
+            body.setVelocityX(patrolDir * HERO_PHYSICS.moveSpeed * GLOAM.speedMult.patrol);
+            this.state = 'prowl';
+            this.setGloamClip('run', seconds, GLOAM.speedMult.patrol);
+        } else if (this.snatchTimer <= 0 && distance <= castRange) {
+            if (player.isShadowed) {
+                this.snatchTimer = GLOAM.snatch.postponeIfShadowed;
+                this.state = 'idle';
+                body.setVelocityX(0);
+                this.setGloamClip('idle', seconds, 1);
+            } else {
+                this.state = 'snatch';
+                this.snatchElapsed = 0;
+                this.snatchFrame = 0;
+                this.previousSnatchFrame = 0;
+                this.snatchBursted = false;
+                body.setVelocityX(0);
+            }
+        } else if (distance <= castRange) {
+            this.state = 'idle';
+            body.setVelocityX(0);
+            this.setGloamClip('idle', seconds, 1);
+        } else {
+            const speedMult = distance > castRange * 2 ? GLOAM.speedMult.chase : GLOAM.speedMult.run;
+            body.setVelocityX(this.facing * HERO_PHYSICS.moveSpeed * speedMult);
+            this.state = 'chase';
+            this.setGloamClip(speedMult === GLOAM.speedMult.chase ? 'chase' : 'run', seconds, speedMult);
+        }
+        this.redrawGraphics(player);
+    }
+
+    setGloamClip(clip, seconds, speed) {
+        if (this.clip !== clip) {
+            this.clip = clip;
+            this.clipElapsed = 0;
+        }
+        this.clipElapsed += seconds;
+        this.clipSpeed = speed;
+    }
+
+    redrawGloam(player) {
+        if (!this.inUse || !this.visual || !this.visual.active || !this.sprite || !this.sprite.active) {
+            return;
+        }
+        const body = this.sprite.body;
+        const centerX = body.center.x;
+        const feetY = body.bottom;
+        let key = 'gloam-run';
+        let frame;
+        let clip = GLOAM_SHEETS[key].clips[this.clip] || GLOAM_SHEETS[key].clips.idle;
+        let speed = this.clipSpeed ?? 1;
+        if (this.state === 'snatch') {
+            key = 'gloam-snatch';
+            frame = this.snatchFrame;
+        } else if (this.state === 'chase') {
+            key = 'gloam-chase';
+            clip = GLOAM_SHEETS[key].clips.chase;
+        }
+        if (frame === undefined) {
+            this.gloamFrameOptions.from = clip.from;
+            this.gloamFrameOptions.to = clip.to;
+            this.gloamFrameOptions.loop = clip.mode !== 'once';
+            this.gloamFrameOptions.pingpong = clip.mode === 'pingpong';
+            this.gloamFrameOptions.speed = speed;
+            frame = frameAt(key, this.clipElapsed, this.gloamFrameOptions);
+        }
+        showFrame(this.visual, key, frame, this.facing);
+        this.visual.setPosition(centerX, feetY);
+        this.visual.setAlpha(this.visualAlpha ?? 1);
+        if (this.flashTimer > 0) {
+            this.visual.setTint(0xffffff);
+        } else {
+            this.visual.clearTint();
+        }
+
+        this.aura.clear();
+        this.aura.setPosition(centerX, feetY);
+        this.aura.fillStyle(0x8739d1, 0.13 + (Math.sin(this.elapsed * 6) + 1) * 0.055);
+        this.aura.fillEllipse(0, -this.height * 0.42, this.width * 1.2, this.height * 0.9);
+        this.aura.setAlpha(this.visualAlpha ?? 1);
+
+        this.healthBack.setPosition(centerX, feetY - this.height - 12);
+        this.healthBar.setPosition(centerX - (this.width + 12) / 2, feetY - this.height - 12);
+        this.healthBar.setSize((this.width + 12) * (this.health / this.maxHealth), 4);
+
+        this.readable.clear();
+        this.readable.setPosition(centerX, feetY);
+        if (this.state === 'snatch' && this.snatchFrame < GLOAM.snatch.strikeFrame) {
+            const progress = this.snatchFrame / GLOAM.snatch.strikeFrame;
+            const ringRadius = 12 + progress * 30;
+            this.readable.lineStyle(3, 0xb56bff, 0.95);
+            this.readable.beginPath();
+            this.readable.arc(0, -this.height - 25, ringRadius, 0, Math.PI * 2);
+            this.readable.strokePath();
+            if (player && player.sprite && player.sprite.active) {
+                this.readable.lineStyle(2, 0x21112d, 0.85);
+                this.readable.beginPath();
+                this.readable.moveTo(0, -3);
+                this.readable.lineTo(player.sprite.body.center.x - centerX, -3);
+                this.readable.strokePath();
+            }
+        }
+        this.readable.setAlpha(this.visualAlpha ?? 1);
+    }
+
     redrawGraphics(player) {
         if (!this.inUse || !this.sprite || !this.sprite.active) {
             return;
         }
+        if (this.type === 'gloam') {
+            this.redrawGloam(player);
+            return;
+        }
         const width = this.config.width;
         const height = this.config.height;
-        const bodyColor = this.flashTimer > 0 ? 0xffffff : (this.type === 'imp' ? 0x331735 : 0x8c3b3b);
+        const bodyColor = this.flashTimer > 0 ? 0xffffff : 0x8c3b3b;
         this.aura.clear();
         this.aura.setPosition(this.sprite.x, this.sprite.y);
-        if (this.type === 'imp') {
-            const pulse = 0.1 + (Math.sin(this.elapsed * 6) + 1) * 0.055;
-            this.aura.fillStyle(0x8739d1, pulse);
-            this.aura.fillEllipse(0, 0, width * 2.2, height * 1.8);
-        }
 
         this.visual.clear();
-        const bob = this.type === 'imp' ? Math.sin(this.elapsed * this.config.floatSpeed) * this.config.floatBob : 0;
-        const castLift = this.castTelegraphTimer > 0 ? 4 : 0;
-        this.visual.setPosition(this.sprite.x, this.sprite.y + bob - castLift);
+        this.visual.setPosition(this.sprite.x, this.sprite.y);
         this.visual.fillStyle(bodyColor, 1);
         this.visual.fillEllipse(0, 0, width, height);
-        this.visual.lineStyle(this.type === 'brute' ? 3 : 2, this.type === 'brute' ? 0x30151b : 0x170f22, 1);
+        this.visual.lineStyle(6, 0x30151b, 1);
         this.visual.strokeEllipse(0, 0, width, height);
-        if (this.type === 'imp') {
-            this.drawHorns(height);
-        } else {
-            this.drawBruteSpikes(width, height);
-        }
+        this.drawBruteSpikes(width, height);
         this.healthBack.setPosition(this.sprite.x, this.sprite.y - height / 2 - 12);
         this.healthBar.setPosition(this.sprite.x - (width + 12) / 2, this.sprite.y - height / 2 - 12);
         this.healthBar.setSize((width + 12) * (this.health / this.maxHealth), 4);
 
         this.readable.clear();
-        this.readable.setPosition(this.sprite.x, this.sprite.y + bob - castLift);
-        this.readable.fillStyle(this.type === 'imp' ? 0xffc45e : 0xff633f, 1);
+        this.readable.setPosition(this.sprite.x, this.sprite.y);
+        this.readable.fillStyle(0xff633f, 1);
         this.readable.fillEllipse(-7, -4, 6, 4);
         this.readable.fillEllipse(7, -4, 6, 4);
         if (this.castTelegraphTimer > 0 && player && player.sprite && player.sprite.active) {
@@ -273,26 +479,44 @@ export default class Enemy {
     }
 
     drawBruteSpikes(width, height) {
-        this.leftSpikePoints[0].set(-width / 2 + 4, -height / 4);
-        this.leftSpikePoints[1].set(-width / 2 - 14, -height / 2 + 4);
-        this.leftSpikePoints[2].set(-width / 2 + 12, -height / 2 + 14);
-        this.rightSpikePoints[0].set(width / 2 - 4, -height / 4);
-        this.rightSpikePoints[1].set(width / 2 + 14, -height / 2 + 4);
-        this.rightSpikePoints[2].set(width / 2 - 12, -height / 2 + 14);
+        this.leftSpikePoints[0].set(-width / 2 + 8, -height / 4);
+        this.leftSpikePoints[1].set(-width / 2 - 28, -height / 2 + 8);
+        this.leftSpikePoints[2].set(-width / 2 + 24, -height / 2 + 28);
+        this.rightSpikePoints[0].set(width / 2 - 8, -height / 4);
+        this.rightSpikePoints[1].set(width / 2 + 28, -height / 2 + 8);
+        this.rightSpikePoints[2].set(width / 2 - 24, -height / 2 + 28);
         this.visual.fillStyle(0x501f2a, 1);
         this.visual.fillPoints(this.leftSpikePoints, true, false);
         this.visual.fillPoints(this.rightSpikePoints, true, false);
     }
 
-    applyDamage(amount, fromX) {
+    applyDamage(amount, fromX, knockback = null, stun = null) {
         if (!this.sprite || !this.sprite.active || this.isDefeated || this.untargetable) {
             return;
         }
-        this.health = Math.max(0, this.health - amount);
         this.flashTimer = this.config.flash;
-        this.stunTimer = this.config.stun;
-        this.sprite.body.setVelocityX(this.sprite.x >= fromX ? this.config.knockback : -this.config.knockback);
-        if (this.castTelegraphTimer > 0) {
+        let appliedDamage = amount;
+        let appliedStun = stun ?? this.config.stun;
+        if (this.type === 'gloam' && this.state === 'snatch') {
+            const vulnerable = this.snatchFrame >= GLOAM.snatch.vulnerableFrom && this.snatchFrame <= GLOAM.snatch.lastFrame;
+            if (vulnerable) {
+                appliedStun = Math.max(appliedStun, 0.8);
+            } else {
+                appliedDamage = Math.round(appliedDamage * 0.35);
+            }
+            if (this.snatchFrame < GLOAM.snatch.strikeFrame) {
+                this.snatchTimer = GLOAM.snatch.interruptRestart;
+                this.snatchElapsed = 0;
+                this.snatchFrame = 0;
+                this.snatchBursted = false;
+                this.state = 'stunned';
+            }
+        }
+        this.health = Math.max(0, this.health - appliedDamage);
+        this.stunTimer = appliedStun;
+        const push = knockback ?? this.config.knockback;
+        this.sprite.body.setVelocityX(this.sprite.x >= fromX ? push : -push);
+        if (this.type !== 'gloam' && this.castTelegraphTimer > 0) {
             this.castTelegraphTimer = 0;
             this.castTimer = 3;
             this.state = 'chase';
@@ -325,6 +549,9 @@ export default class Enemy {
         this.defeatTimer = Math.max(0, this.defeatTimer - delta / 1000);
         const alpha = this.defeatTimer / 0.25;
         this.visual.setAlpha(alpha);
+        if (this.type === 'gloam') {
+            this.visual.setScale(this.gloamScale * alpha);
+        }
         this.readable.setAlpha(alpha);
         this.aura.setAlpha(alpha);
         if (this.defeatTimer === 0) {

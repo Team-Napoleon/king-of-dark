@@ -5,7 +5,7 @@ import Player from '../entities/Player';
 import DialogueBox from '../ui/DialogueBox';
 import Letterbox from '../ui/Letterbox';
 import PlayerHud from '../ui/PlayerHud';
-import { DEBUG_KEYS, HERO_PUNCH, KING_ATTACKS } from '../config/animationData';
+import { BOSS_INTRO, DEBUG_KEYS, KING, KING_ATTACKS } from '../config/animationData';
 
 export default class ArenaScene extends Scene {
     constructor() {
@@ -32,13 +32,14 @@ export default class ArenaScene extends Scene {
         this.player = new Player(this, 260, 570);
         this.darkness = new DarknessOverlay(this, this.player, {
             alpha: 0.8,
-            lightScale: 1.4,
+            lightScale: 1.89,
             fogWorldWidth: 1280,
             fogScrollFactor: 0,
             fogAlpha: 0.14,
         });
         this.darknessEnabled = true;
         this.darknessKey = this.input.keyboard.addKey('F2');
+        this.restartKey = this.input.keyboard.addKey('R');
         this.physics.add.collider(this.player.sprite, this.floor);
         this.enemies = [];
         this.hud = new PlayerHud(this, this.player, { showControls: false });
@@ -89,36 +90,33 @@ export default class ArenaScene extends Scene {
         this.letterbox = new Letterbox(this);
         this.enterKey = this.input.keyboard.addKey('ENTER');
         this.introActive = false;
-        this.introOutroStarted = false;
+        this.introElapsed = 0;
+        this.introDialogueStarted = false;
+        this.introEyesFlashed = false;
+        this.introShakeStarted = false;
+        this.introZoomBackStarted = false;
+        this.introBarsOutStarted = false;
         this.cameraZoomInTween = this.tweens.add({
             targets: this.cameras.main,
-            zoom: 1.15,
-            duration: 600,
+            zoom: BOSS_INTRO.zoom.to,
+            duration: BOSS_INTRO.zoom.dur * 1000,
             paused: true,
             persist: true,
-            onComplete: () => {
-                if (!this.sys.isActive() || !this.introActive) {
-                    return;
-                }
-                this.dialogueBox.show([
-                    { speaker: 'KING', text: 'You came for power.' },
-                    { speaker: 'HERO', text: 'I came to end you.' },
-                    { speaker: 'KING', text: 'Everyone says that. Come then.' },
-                ], { onComplete: () => this.finishIntroDialogue() });
-            },
         });
         this.cameraZoomOutTween = this.tweens.add({
             targets: this.cameras.main,
             zoom: 1,
-            duration: 600,
+            duration: BOSS_INTRO.zoomBack.dur * 1000,
             paused: true,
             persist: true,
-            onComplete: () => {
-                if (!this.sys.isActive() || !this.introActive) {
-                    return;
-                }
-                this.finishIntroStep();
-            },
+        });
+        this.cameraPanBackTween = this.tweens.add({
+            targets: this.cameras.main,
+            scrollX: 0,
+            scrollY: 0,
+            duration: BOSS_INTRO.zoomBack.dur * 1000,
+            paused: true,
+            persist: true,
         });
         if (this.registry.get('bossIntroSeen')) {
             this.boss.startFight(980);
@@ -127,12 +125,6 @@ export default class ArenaScene extends Scene {
             this.startIntro();
         }
 
-        this.input.keyboard.on('keydown-R', () => {
-            if (!this.gameOverText || !this.gameOverText.active || !this.sys.isActive()) {
-                return;
-            }
-            this.scene.restart();
-        });
         this.events.once('shutdown', () => {
             if (this.hud) {
                 this.hud.destroy();
@@ -149,6 +141,9 @@ export default class ArenaScene extends Scene {
             }
             if (this.cameraZoomOutTween) {
                 this.cameraZoomOutTween.stop();
+            }
+            if (this.cameraPanBackTween) {
+                this.cameraPanBackTween.stop();
             }
         });
     }
@@ -181,39 +176,84 @@ export default class ArenaScene extends Scene {
 
     startIntro() {
         this.introActive = true;
+        this.introElapsed = 0;
+        this.introDialogueStarted = false;
+        this.introEyesFlashed = false;
+        this.introShakeStarted = false;
+        this.introZoomBackStarted = false;
+        this.introBarsOutStarted = false;
         this.player.controlsLocked = true;
         this.player.sprite.body.setVelocity(0, 0);
         this.player.poseVisual(0);
         this.cameras.main.setZoom(1);
-        this.letterbox.playIn(() => {
-            if (!this.sys.isActive() || !this.introActive) {
-                return;
-            }
-            this.cameraZoomInTween.restart();
-        });
+        this.cameras.main.centerOn(KING.throneX, KING.throneY);
+        this.letterbox.setTimelineProgress('in', 0);
+        this.cameraZoomInTween.restart();
     }
 
-    finishIntroDialogue() {
-        if (!this.sys.isActive() || !this.introActive || this.introOutroStarted) {
+    updateIntro(delta) {
+        if (!this.introActive) {
             return;
         }
-        this.introOutroStarted = true;
-        this.cameraZoomInTween.stop();
-        this.boss.flashEyes();
-        this.cameras.main.shake(300, 0.01);
-        this.letterbox.playOut();
-        this.cameraZoomOutTween.restart();
+        this.introElapsed = Math.min(BOSS_INTRO.totalSeconds, this.introElapsed + delta / 1000);
+        const elapsed = this.introElapsed;
+        const barsInProgress = Math.max(0, Math.min(1, (elapsed - BOSS_INTRO.barsIn.at) / BOSS_INTRO.barsIn.dur));
+        if (!this.introBarsOutStarted) {
+            this.letterbox.setTimelineProgress('in', barsInProgress);
+        }
+        if (!this.introDialogueStarted && elapsed >= BOSS_INTRO.dialogueStart) {
+            this.introDialogueStarted = true;
+            this.dialogueBox.show(BOSS_INTRO.lines);
+        }
+        if (!this.introEyesFlashed && elapsed >= BOSS_INTRO.eyeFlash.at) {
+            this.introEyesFlashed = true;
+            this.boss.flashEyes(BOSS_INTRO.eyeFlash.dur);
+        }
+        if (!this.introShakeStarted && elapsed >= BOSS_INTRO.shake.at) {
+            this.introShakeStarted = true;
+            this.cameras.main.shake(BOSS_INTRO.shake.dur * 1000, 0.01);
+        }
+        if (!this.introZoomBackStarted && elapsed >= BOSS_INTRO.zoomBack.at) {
+            this.introZoomBackStarted = true;
+            this.cameraZoomOutTween.restart();
+            this.cameraPanBackTween.restart();
+        }
+        if (!this.introBarsOutStarted && elapsed >= BOSS_INTRO.barsOut.at) {
+            this.introBarsOutStarted = true;
+        }
+        if (this.introBarsOutStarted) {
+            const progress = Math.max(0, Math.min(1, (elapsed - BOSS_INTRO.barsOut.at) / BOSS_INTRO.barsOut.dur));
+            this.letterbox.setTimelineProgress('out', progress);
+        }
+        if (elapsed >= BOSS_INTRO.unlockAt) {
+            this.finishIntroTimeline(false);
+        }
     }
 
-    finishIntroStep() {
+    finishIntroTimeline(skipped) {
         if (!this.sys.isActive() || !this.introActive) {
             return;
+        }
+        if (skipped) {
+            this.introElapsed = BOSS_INTRO.totalSeconds;
+            this.cameraZoomInTween.stop();
+            this.cameraZoomOutTween.stop();
+            this.cameraPanBackTween.stop();
+            this.cameras.main.setZoom(1);
+            this.cameras.main.centerOn(640, 360);
+            this.letterbox.setTimelineProgress('out', 1);
+            if (this.dialogueBox.isShowing) {
+                this.dialogueBox.skip();
+            }
         }
         this.registry.set('bossIntroSeen', true);
         this.boss.beginCombat();
         this.player.controlsLocked = false;
         this.setBossHudVisible(true);
         this.introActive = false;
+        if (DEBUG_KEYS) {
+            console.log(`[intro] done at ${this.introElapsed.toFixed(1)} s`);
+        }
     }
 
     handleBossDefeated() {
@@ -235,11 +275,10 @@ export default class ArenaScene extends Scene {
         this.darkness.update(delta);
         this.dialogueBox.update(delta);
         if (this.introActive && Input.Keyboard.JustDown(this.enterKey)) {
-            if (this.dialogueBox.isShowing) {
-                this.dialogueBox.skip();
-            } else {
-                this.finishIntroDialogue();
-            }
+            this.finishIntroTimeline(true);
+        }
+        if (this.introActive) {
+            this.updateIntro(delta);
         }
         if (DEBUG_KEYS) {
             if (Input.Keyboard.JustDown(this.darknessKey)) {
@@ -268,6 +307,9 @@ export default class ArenaScene extends Scene {
         }
         if (this.player.isGameOver && !this.gameOverShown) {
             this.triggerGameOver();
+        }
+        if (this.gameOverText && this.gameOverText.active && Input.Keyboard.JustDown(this.restartKey)) {
+            this.scene.restart();
         }
     }
 
@@ -298,9 +340,23 @@ export default class ArenaScene extends Scene {
         const playerBody = this.player.sprite.body;
         this.drawDebugRect(playerBody.x, playerBody.y, playerBody.width, playerBody.height, 0x36ff70);
         if (this.player.hitBoxActive) {
-            const hitX = this.player.hitBoxDir > 0 ? this.player.sprite.x - 10 : this.player.sprite.x - HERO_PUNCH.reach;
-            this.drawDebugRect(hitX, this.player.hitBoxY - HERO_PUNCH.vertical, HERO_PUNCH.reach, HERO_PUNCH.vertical * 2, 0xffe336);
+            this.drawDebugRect(
+                this.player.hitBoxX,
+                this.player.hitBoxY - this.player.hitBoxHeight / 2,
+                this.player.hitBoxWidth,
+                this.player.hitBoxHeight,
+                0xffe336,
+            );
         }
+        this.player.fireballs.forEach((ball) => {
+            if (!ball.active) {
+                return;
+            }
+            this.debugGraphics.lineStyle(2, 0xff9b32, 1);
+            this.debugGraphics.beginPath();
+            this.debugGraphics.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            this.debugGraphics.strokePath();
+        });
         this.drawDebugRect(
             this.boss.sprite.x - this.boss.hitHalfWidth,
             this.boss.sprite.body.center.y - this.boss.hitHalfHeight,

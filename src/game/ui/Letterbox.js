@@ -60,6 +60,15 @@ export default class Letterbox {
         this.tween.restart();
     }
 
+    setTimelineProgress(mode, value) {
+        if (!this.top || !this.top.active || !this.bottom || !this.bottom.active) {
+            return;
+        }
+        this.mode = mode;
+        this.progress.value = Math.max(0, Math.min(1, value));
+        this.applyProgress();
+    }
+
     applyProgress() {
         if (!this.top || !this.top.active || !this.bottom || !this.bottom.active) {
             return;

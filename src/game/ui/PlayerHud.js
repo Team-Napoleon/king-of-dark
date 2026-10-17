@@ -1,4 +1,5 @@
-import { SHADOW } from '../config/animationData';
+import { Input } from 'phaser';
+import { NEW_HERO_MOVES, SHADOW } from '../config/animationData';
 
 export default class PlayerHud {
     constructor(scene, player, { showControls = true, showKills = showControls } = {}) {
@@ -50,32 +51,59 @@ export default class PlayerHud {
             stroke: '#000000',
             strokeThickness: 3,
         }).setScrollFactor(0).setDepth(100).setVisible(showKills);
+        this.fireText = scene.add.text(28, 98, 'FIRE', {
+            fontFamily: 'Arial',
+            fontSize: '10px',
+            color: '#ffc078',
+            stroke: '#000000',
+            strokeThickness: 2,
+        }).setScrollFactor(0).setDepth(100);
+        this.fireBack = scene.add.rectangle(64, 103, 108, 5, 0x321c17, 0.9)
+            .setOrigin(0, 0.5)
+            .setScrollFactor(0)
+            .setDepth(100);
+        this.fireBar = scene.add.rectangle(64, 103, 108, 3, 0xff8737)
+            .setOrigin(0, 0.5)
+            .setScrollFactor(0)
+            .setDepth(101);
 
-        this.controlsPanel = null;
-        this.controlsText = null;
-        if (showControls) {
-            this.controlsText = scene.add.text(40, 124, 'TEMPLE TRIAL\nMove A/D or arrows\nJump Space/Up\nJ Punch left\nL Punch right\nK Combo\nE Enter portal\nR Restart', {
-                fontFamily: 'Arial',
-                fontSize: '16px',
-                color: '#e7d9c0',
-                stroke: '#000000',
-                strokeThickness: 4,
-                lineSpacing: 6,
-            }).setScrollFactor(0).setDepth(100);
-            this.controlsPanel = scene.add.rectangle(
-                24,
-                112,
-                this.controlsText.width + 32,
-                this.controlsText.height + 24,
-                0x1a1b22,
-                0.7,
-            ).setOrigin(0, 0).setStrokeStyle(2, 0x7e5a40, 1).setScrollFactor(0).setDepth(99);
-        }
+        const savedControlsOpen = scene.registry.get('controlsOpen');
+        this.controlsOpen = typeof savedControlsOpen === 'boolean' ? savedControlsOpen : showControls;
+        this.autoCollapse = showControls && typeof savedControlsOpen !== 'boolean';
+        this.controlsElapsed = 0;
+        this.controlsKey = scene.input.keyboard.addKey('H');
+        this.controlsPanel = scene.add.rectangle(952, 78, 300, 132, 0x11151c, 0.75)
+            .setOrigin(0, 0)
+            .setScrollFactor(0)
+            .setDepth(95)
+            .setVisible(false);
+        this.controlsLeft = scene.add.text(968, 90, 'MOVE A/D\nJ Punch\nU Kick\nO Fireball\nR Restart', {
+            fontFamily: 'Arial',
+            fontSize: '13px',
+            color: '#e7d9c0',
+            lineSpacing: 5,
+        }).setScrollFactor(0).setDepth(96).setVisible(false);
+        this.controlsRight = scene.add.text(1104, 90, 'JUMP Space\nK Combo\nI Sword\nE Portal\nH Hide', {
+            fontFamily: 'Arial',
+            fontSize: '13px',
+            color: '#e7d9c0',
+            lineSpacing: 5,
+        }).setScrollFactor(0).setDepth(96).setVisible(false);
+        this.controlsChipBack = scene.add.rectangle(1110, 78, 142, 28, 0x11151c, 0.75)
+            .setOrigin(0, 0)
+            .setScrollFactor(0)
+            .setDepth(95)
+            .setVisible(false);
+        this.controlsChip = scene.add.text(1120, 84, '[H] Controls', {
+            fontFamily: 'Arial',
+            fontSize: '13px',
+            color: '#e7d9c0',
+        }).setScrollFactor(0).setDepth(96).setVisible(false);
 
         this.update();
     }
 
-    update() {
+    update(delta = this.scene.game.loop.delta) {
         if (!this.healthBar || !this.healthBar.active || !this.player) {
             return;
         }
@@ -90,13 +118,36 @@ export default class PlayerHud {
         this.shadowMeterBack.setVisible(shadowed);
         this.shadowMeter.setVisible(shadowed);
         if (shadowed) {
-            this.shadowText.setText('SHADOWED - MASH J / K / L');
+            this.shadowText.setText('SHADOWED - MASH J / K');
             const progress = Math.max(0, Math.min(1, this.player.shadowMeter / SHADOW.breakThreshold));
             this.shadowMeter.setSize(180 * progress, 4);
         }
         if (this.showKills) {
             this.killsText.setText(`SHADOWS SLAIN ${this.kills}/${this.killsTotal}`);
         }
+        const cooldown = NEW_HERO_MOVES.fire.cooldown;
+        const ready = 1 - Math.max(0, Math.min(1, this.player.fireCooldown / cooldown));
+        this.fireBar.setSize(108 * ready, 3);
+
+        if (Input.Keyboard.JustDown(this.controlsKey)) {
+            this.controlsOpen = !this.controlsOpen;
+            this.autoCollapse = false;
+            this.scene.registry.set('controlsOpen', this.controlsOpen);
+        }
+        if (this.autoCollapse) {
+            this.controlsElapsed += delta / 1000;
+            if (this.controlsElapsed >= 6) {
+                this.controlsOpen = false;
+                this.autoCollapse = false;
+                this.scene.registry.set('controlsOpen', false);
+            }
+        }
+        const blocked = this.player.controlsLocked || Boolean(this.scene.dialogueBox?.isShowing) || Boolean(this.scene.introActive);
+        this.controlsPanel.setVisible(!blocked && this.controlsOpen);
+        this.controlsLeft.setVisible(!blocked && this.controlsOpen);
+        this.controlsRight.setVisible(!blocked && this.controlsOpen);
+        this.controlsChipBack.setVisible(!blocked && !this.controlsOpen);
+        this.controlsChip.setVisible(!blocked && !this.controlsOpen);
     }
 
     setKills(kills, total = this.killsTotal) {
@@ -108,7 +159,7 @@ export default class PlayerHud {
     }
 
     destroy() {
-        [this.healthBackground, this.healthBar, this.healthText, this.shadowText, this.shadowMeterBack, this.shadowMeter, this.killsText, this.controlsPanel, this.controlsText]
+        [this.healthBackground, this.healthBar, this.healthText, this.shadowText, this.shadowMeterBack, this.shadowMeter, this.killsText, this.fireText, this.fireBack, this.fireBar, this.controlsPanel, this.controlsLeft, this.controlsRight, this.controlsChipBack, this.controlsChip]
             .forEach((object) => {
                 if (object && object.active) {
                     object.destroy();

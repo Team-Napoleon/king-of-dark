@@ -83,9 +83,10 @@ export default class DialogueBox {
             this.complete();
             return;
         }
+        const charMs = line.charMs ?? 30;
         this.characterTimer += delta;
-        while (this.characterTimer >= 30 && this.characterIndex < line.text.length) {
-            this.characterTimer -= 30;
+        while (this.characterTimer >= charMs && this.characterIndex < line.text.length) {
+            this.characterTimer -= charMs;
             this.characterIndex += 1;
             this.lineText.setText(line.text.slice(0, this.characterIndex));
         }

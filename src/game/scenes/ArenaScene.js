@@ -348,15 +348,16 @@ export default class ArenaScene extends Scene {
                 0xffe336,
             );
         }
-        this.player.fireballs.forEach((ball) => {
+        for (let index = 0; index < this.player.fireballs.length; index += 1) {
+            const ball = this.player.fireballs[index];
             if (!ball.active) {
-                return;
+                continue;
             }
             this.debugGraphics.lineStyle(2, 0xff9b32, 1);
             this.debugGraphics.beginPath();
             this.debugGraphics.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
             this.debugGraphics.strokePath();
-        });
+        }
         this.drawDebugRect(
             this.boss.sprite.x - this.boss.hitHalfWidth,
             this.boss.sprite.body.center.y - this.boss.hitHalfHeight,

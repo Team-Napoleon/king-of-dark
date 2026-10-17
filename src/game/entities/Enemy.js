@@ -557,7 +557,9 @@ export default class Enemy {
         if (this.defeatTimer === 0) {
             this.inUse = false;
             this.state = 'inactive';
-            [this.visual, this.readable, this.aura].forEach((object) => object.setVisible(false));
+            this.visual.setVisible(false);
+            this.readable.setVisible(false);
+            this.aura.setVisible(false);
             return true;
         }
         return false;

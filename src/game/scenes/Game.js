@@ -210,18 +210,20 @@ export default class TempleScene extends Scene {
     updateHealthOrbs(delta) {
         const heroX = this.player.sprite.body.center.x;
         const heroY = this.player.sprite.body.center.y;
-        this.healthOrbs.forEach((orb) => {
+        for (let index = 0; index < this.healthOrbs.length; index += 1) {
+            const orb = this.healthOrbs[index];
             if (!orb || !orb.inUse || !orb.circle || !orb.circle.active) {
-                return;
+                continue;
             }
             orb.update(delta);
             if (orb.isWithin(heroX, heroY)) {
                 this.collectHealthOrb(orb);
             }
-        });
-        this.healTexts.forEach((text) => {
+        }
+        for (let index = 0; index < this.healTexts.length; index += 1) {
+            const text = this.healTexts[index];
             if (!text || !text.active || text.life <= 0) {
-                return;
+                continue;
             }
             text.life = Math.max(0, text.life - delta / 1000);
             text.y = text.baseY - (0.8 - text.life) * 18;
@@ -229,7 +231,7 @@ export default class TempleScene extends Scene {
             if (text.life === 0) {
                 text.setVisible(false);
             }
-        });
+        }
     }
 
     createPortal() {
@@ -293,9 +295,10 @@ export default class TempleScene extends Scene {
     updatePortal(delta) {
         const seconds = delta / 1000;
         this.portalRotation += seconds;
-        this.portalRings.forEach((ring, index) => {
+        for (let index = 0; index < this.portalRings.length; index += 1) {
+            const ring = this.portalRings[index];
             ring.rotation = this.portalRotation * (index === 1 ? -0.7 : 1 + index * 0.2);
-        });
+        }
 
         if (!this.portalUnlocked && this.kills >= TEMPLE_WAVE.sequence.length) {
             this.portalUnlocked = true;
@@ -470,20 +473,22 @@ export default class TempleScene extends Scene {
                 0xffe336,
             );
         }
-        this.player.fireballs.forEach((ball) => {
+        for (let index = 0; index < this.player.fireballs.length; index += 1) {
+            const ball = this.player.fireballs[index];
             if (!ball.active) {
-                return;
+                continue;
             }
             this.debugGraphics.lineStyle(2, 0xff9b32, 1);
             this.debugGraphics.beginPath();
             this.debugGraphics.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
             this.debugGraphics.strokePath();
-        });
+        }
         graphics.fillStyle(0xffffff, 1);
         graphics.fillEllipse(body.center.x, body.bottom, 4, 4);
-        this.enemies.forEach((enemy) => {
+        for (let index = 0; index < this.enemies.length; index += 1) {
+            const enemy = this.enemies[index];
             if (!enemy || !enemy.sprite || !enemy.sprite.active) {
-                return;
+                continue;
             }
             this.drawDebugRect(
                 enemy.sprite.x - enemy.hitHalfWidth,
@@ -494,7 +499,7 @@ export default class TempleScene extends Scene {
             );
             graphics.fillStyle(0xffffff, 1);
             graphics.fillEllipse(enemy.sprite.body.center.x, enemy.sprite.body.bottom, 4, 4);
-        });
+        }
     }
 
     triggerGameOver() {

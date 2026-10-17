@@ -203,38 +203,36 @@ export default class KingOfDark {
 
     chooseNextAttack(player) {
         const distance = Math.abs(player.sprite.x - this.sprite.x);
-        const candidates = [];
-        if (this.swordCooldown <= 0) {
-            candidates.push({ name: 'sword', weight: distance > 180 ? 3 : 2 });
+        const swordWeight = this.swordCooldown <= 0 ? (distance > 180 ? 3 : 2) : 0;
+        const tendrilWeight = distance <= 200 ? 3 : 0;
+        const voidWeight = (distance <= 260 ? 2 : 1) * (this.phaseTwo ? 1.5 : 1);
+        let availableSwordWeight = this.lastAttack === 'sword' ? 0 : swordWeight;
+        let availableTendrilWeight = this.lastAttack === 'tendril' ? 0 : tendrilWeight;
+        let availableVoidWeight = this.lastAttack === 'void' ? 0 : voidWeight;
+        let totalWeight = availableSwordWeight + availableTendrilWeight + availableVoidWeight;
+        if (totalWeight === 0) {
+            availableSwordWeight = swordWeight;
+            availableTendrilWeight = tendrilWeight;
+            availableVoidWeight = voidWeight;
+            totalWeight = availableSwordWeight + availableTendrilWeight + availableVoidWeight;
         }
-        if (distance <= 200) {
-            candidates.push({ name: 'tendril', weight: 3 });
-        }
-        candidates.push({ name: 'void', weight: (distance <= 260 ? 2 : 1) * (this.phaseTwo ? 1.5 : 1) });
 
-        let choices = candidates.filter((candidate) => candidate.name !== this.lastAttack);
-        if (choices.length === 0) {
-            choices = candidates;
-        }
-        const totalWeight = choices.reduce((sum, candidate) => sum + candidate.weight, 0);
         let roll = Math.random() * totalWeight;
-        let selected = choices[0];
-        for (let index = 0; index < choices.length; index += 1) {
-            roll -= choices[index].weight;
-            if (roll <= 0) {
-                selected = choices[index];
-                break;
-            }
+        let selected = 'void';
+        if (availableSwordWeight > 0 && (roll -= availableSwordWeight) <= 0) {
+            selected = 'sword';
+        } else if (availableTendrilWeight > 0 && (roll -= availableTendrilWeight) <= 0) {
+            selected = 'tendril';
         }
 
-        if (distance > 420 && selected.name !== 'sword') {
-            this.pendingAttack = selected.name;
+        if (distance > 420 && selected !== 'sword') {
+            this.pendingAttack = selected;
             this.approachTimer = 0;
             this.state = 'approach';
             this.vulnerable = false;
             return;
         }
-        this.startAttack(selected.name);
+        this.startAttack(selected);
     }
 
     updateApproach(player, seconds) {

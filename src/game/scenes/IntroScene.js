@@ -143,9 +143,20 @@ export default class IntroScene extends Scene {
                 this.t += INTRO_DEBUG.seekStep || 5;
             });
 
-            // Hero Placement Tool (H toggles, arrows move, [ / ] scale, F flips, P prints)
+            // Hero Placement Tool & Bubble Scale Controls
+            this.bubbleScaleMultiplier = 1.0;
             this.placementToolActive = false;
             this.onPlacementKeyDown = (event) => {
+                if (event.key === '-' || event.code === 'Minus' || event.code === 'NumpadSubtract') {
+                    this.bubbleScaleMultiplier = Math.max(0.2, Number((this.bubbleScaleMultiplier - 0.05).toFixed(2)));
+                    console.log(`[Bubble Scale Multiplier] ${this.bubbleScaleMultiplier}`);
+                    return;
+                }
+                if (event.key === '=' || event.key === '+' || event.code === 'Equal' || event.code === 'NumpadAdd') {
+                    this.bubbleScaleMultiplier = Math.min(3.0, Number((this.bubbleScaleMultiplier + 0.05).toFixed(2)));
+                    console.log(`[Bubble Scale Multiplier] ${this.bubbleScaleMultiplier}`);
+                    return;
+                }
                 if (event.code === 'KeyH') {
                     this.placementToolActive = !this.placementToolActive;
                     console.log(`[Hero Placement Tool] ${this.placementToolActive ? 'ENABLED' : 'DISABLED'}`);
@@ -185,6 +196,7 @@ export default class IntroScene extends Scene {
                         feetY: entry.feetY,
                         heightSrc: entry.heightSrc,
                         facing: entry.facing,
+                        bubbleScaleMultiplier: this.bubbleScaleMultiplier,
                     });
                 }
             };
@@ -219,17 +231,19 @@ export default class IntroScene extends Scene {
             if (targetFrame !== currentFrame) {
                 const fromFrame = currentFrame;
                 const toFrame = targetFrame;
-                const targetArrive = cue.start + (config.arriveAfterCueStart ?? 0.2);
-                const prevCueStart = i > 0 ? streetCues[i - 1].start : 6.0;
-
+                // Arrives 0.3s BEFORE Mother begins her line over 1.2s pan
+                const arriveBefore = config.arriveBeforeCueStart ?? 0.3;
+                const targetArrive = cue.start - arriveBefore;
                 let duration = config.moveSeconds ?? 1.2;
                 let startTime = targetArrive - duration;
+
+                const prevCueEnd = i > 0 ? streetCues[i - 1].end : 8.8;
                 let shortened = false;
                 const originalDuration = duration;
 
-                if (startTime < prevCueStart) {
-                    duration = targetArrive - prevCueStart;
-                    startTime = prevCueStart;
+                if (startTime < prevCueEnd) {
+                    startTime = prevCueEnd;
+                    duration = targetArrive - startTime;
                     shortened = true;
                 }
 
@@ -252,8 +266,10 @@ export default class IntroScene extends Scene {
     }
 
     getCurrentPictureKey() {
-        if (this.t < 6.0) return 'intro-1';
-        if (this.t < 21.0) return 'intro-2';
+        const s1 = SHOTS[1]?.start ?? 8.8;
+        const s2 = SHOTS[2]?.start ?? 45.0;
+        if (this.t < s1) return 'intro-1';
+        if (this.t < s2) return 'intro-2';
         return 'intro-3';
     }
 
@@ -271,7 +287,7 @@ export default class IntroScene extends Scene {
             return;
         }
 
-        // Alpha from picture
+        // Match hero visual opacity to picture crossfades
         let pictureAlpha = 1.0;
         if (pictureKey === 'intro-2' && this.shotImages.market) {
             pictureAlpha = this.shotImages.market.alpha;
@@ -306,14 +322,14 @@ export default class IntroScene extends Scene {
             this.heroSprite.setTint(entry.tint);
         }
 
-        // Feet position and idle breathing
+        // Position feet at (feetX, feetY) with subtle breathing offset
         const feetWorld = toWorld(entry.feetX, entry.feetY);
         const breathe = INTRO_ACTORS.hero.breathe;
         const breatheOffset = breathe ? breathe.px * Math.sin((2 * Math.PI * t) / breathe.period) : 0;
 
         this.heroSprite.setPosition(feetWorld.x, feetWorld.y + breatheOffset);
 
-        // Shadow ellipse
+        // Soft shadow ellipse under feet
         this.heroShadow.clear();
         const shadowConfig = entry.shadow || { alpha: 0.35, widthRatio: 0.55, heightRatio: 0.12 };
         const shadowAlpha = shadowConfig.alpha * pictureAlpha;
@@ -324,41 +340,48 @@ export default class IntroScene extends Scene {
     }
 
     updatePictures(t) {
-        // Shot 1: village (0.0 to 6.3, fadeInFromBlack: 0.9)
+        const shot1 = SHOTS[0];
+        const shot2 = SHOTS[1];
+        const shot3 = SHOTS[2];
+
+        // Shot 1: village
         const img1 = this.shotImages.village;
         if (img1) {
             if (t < 0.0) {
                 img1.setVisible(false).setAlpha(0);
-            } else if (t < 0.9) {
-                img1.setVisible(true).setAlpha(t / 0.9);
-            } else if (t < 6.6) {
+            } else if (t < (shot1.fadeInFromBlack || 0.9)) {
+                img1.setVisible(true).setAlpha(t / (shot1.fadeInFromBlack || 0.9));
+            } else if (t < shot2.start + (shot2.crossfadeIn || 0.6)) {
                 img1.setVisible(true).setAlpha(1);
             } else {
                 img1.setVisible(false).setAlpha(0);
             }
         }
 
-        // Shot 2: market (6.0 to 21.3, crossfadeIn: 0.6)
+        // Shot 2: market
         const img2 = this.shotImages.market;
         if (img2) {
-            if (t < 6.0) {
+            const s2In = shot2.crossfadeIn || 0.6;
+            const s3In = shot3.crossfadeIn || 0.6;
+            if (t < shot2.start) {
                 img2.setVisible(false).setAlpha(0);
-            } else if (t < 6.6) {
-                img2.setVisible(true).setAlpha((t - 6.0) / 0.6);
-            } else if (t < 21.6) {
+            } else if (t < shot2.start + s2In) {
+                img2.setVisible(true).setAlpha((t - shot2.start) / s2In);
+            } else if (t < shot3.start + s3In) {
                 img2.setVisible(true).setAlpha(1);
             } else {
                 img2.setVisible(false).setAlpha(0);
             }
         }
 
-        // Shot 3: temple (21.0 to 30.0, crossfadeIn: 0.6)
+        // Shot 3: temple
         const img3 = this.shotImages.temple;
         if (img3) {
-            if (t < 21.0) {
+            const s3In = shot3.crossfadeIn || 0.6;
+            if (t < shot3.start) {
                 img3.setVisible(false).setAlpha(0);
-            } else if (t < 21.6) {
-                img3.setVisible(true).setAlpha((t - 21.0) / 0.6);
+            } else if (t < shot3.start + s3In) {
+                img3.setVisible(true).setAlpha((t - shot3.start) / s3In);
             } else {
                 img3.setVisible(true).setAlpha(1);
             }
@@ -370,15 +393,20 @@ export default class IntroScene extends Scene {
         let camX = 672;
         let camY = 384;
 
-        if (t < 6.0) {
-            // Shot 1: village camera zoom/focus (unchanged)
-            const shot = SHOTS[0];
-            const p = Math.max(0, Math.min(1, t / 6.0));
+        const shot1 = SHOTS[0];
+        const shot2 = SHOTS[1];
+        const shot3 = SHOTS[2];
+
+        if (t < shot2.start) {
+            // Shot 1: village camera zoom/focus
+            const shot = shot1;
+            const duration = shot2.start;
+            const p = Math.max(0, Math.min(1, t / duration));
             const ep = easeSineInOut(p);
             zoom = shot.camera.from.zoom + (shot.camera.to.zoom - shot.camera.from.zoom) * ep;
             camX = shot.camera.from.x + (shot.camera.to.x - shot.camera.from.x) * ep;
             camY = shot.camera.from.y + (shot.camera.to.y - shot.camera.from.y) * ep;
-        } else if (t < 21.0) {
+        } else if (t < shot3.start) {
             // Shot 2: market street scene camera scheduled from cameraFrames['intro-2']
             const config = this.streetCameraConfig;
             if (config) {
@@ -410,8 +438,8 @@ export default class IntroScene extends Scene {
                 camY = currentY;
             }
         } else {
-            // Shot 3: temple camera (unchanged)
-            const shot = SHOTS[2];
+            // Shot 3: temple camera
+            const shot = shot3;
             const cam = shot.camera;
             if (t <= cam.startAt) {
                 zoom = cam.from.zoom;
@@ -583,7 +611,7 @@ export default class IntroScene extends Scene {
         const dt = delta / 1000;
         this.t += dt;
 
-        if (this.t >= (INTRO_FLOW.totalDuration || 30.0)) {
+        if (this.t >= (INTRO_FLOW.totalDuration || 63.0)) {
             this.finish();
             return;
         }

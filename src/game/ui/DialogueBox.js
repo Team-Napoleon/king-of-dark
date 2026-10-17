@@ -134,6 +134,44 @@ export default class DialogueBox {
         }
     }
 
+    setLine(speaker, text, color, visibleChars) {
+        if (!this.panel || !this.panel.active) {
+            return;
+        }
+        this.isShowing = true;
+        this.completed = false;
+        [this.panel, this.speakerText, this.lineText].forEach((object) => {
+            if (object && object.active) {
+                object.setVisible(true);
+            }
+        });
+        if (this.speakerText && this.speakerText.active) {
+            this.speakerText.setText(speaker || '');
+            if (color !== undefined) {
+                const hexColor = typeof color === 'number'
+                    ? `#${color.toString(16).padStart(6, '0')}`
+                    : color;
+                this.speakerText.setColor(hexColor);
+            }
+        }
+        if (this.lineText && this.lineText.active) {
+            const str = text || '';
+            const count = visibleChars !== undefined
+                ? Math.max(0, Math.min(str.length, visibleChars))
+                : str.length;
+            this.lineText.setText(str.slice(0, count));
+        }
+    }
+
+    hide() {
+        this.isShowing = false;
+        [this.panel, this.speakerText, this.lineText].forEach((object) => {
+            if (object && object.active) {
+                object.setVisible(false);
+            }
+        });
+    }
+
     destroy() {
         this.isShowing = false;
         this.onComplete = null;

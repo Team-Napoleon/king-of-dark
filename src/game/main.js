@@ -1,6 +1,7 @@
 import { AUTO, Game, Scale } from 'phaser';
 import BootScene from './scenes/BootScene';
 import MainMenuScene from './scenes/MainMenuScene';
+import IntroScene from './scenes/IntroScene';
 import TempleScene from './scenes/Game';
 import ArenaScene from './scenes/ArenaScene';
 
@@ -24,6 +25,7 @@ const config = {
     scene: [
         BootScene,
         MainMenuScene,
+        IntroScene,
         TempleScene,
         ArenaScene,
     ],

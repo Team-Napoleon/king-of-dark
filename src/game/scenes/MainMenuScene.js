@@ -58,7 +58,7 @@ export default class MainMenuScene extends Scene {
                 if (!this.sys.isActive()) {
                     return;
                 }
-                this.scene.start('TempleScene');
+                this.scene.start('IntroScene');
             });
             this.cameras.main.fadeOut(400, 0, 0, 0);
         };

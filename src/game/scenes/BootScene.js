@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { preloadSheets } from '../config/animationData';
+import { preloadIntroImages } from '../config/introData';
 
 export default class BootScene extends Scene {
     constructor() {
@@ -40,6 +41,7 @@ export default class BootScene extends Scene {
         });
 
         preloadSheets(this);
+        preloadIntroImages(this);
         this.load.image('bg-menu', 'assets/backgrounds/menu.jpg');
         this.load.image('bg-temple', 'assets/backgrounds/temple.jpg');
         this.load.image('bg-arena', 'assets/backgrounds/arena.jpg');

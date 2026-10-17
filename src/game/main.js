@@ -4,6 +4,8 @@ import MainMenuScene from './scenes/MainMenuScene';
 import IntroScene from './scenes/IntroScene';
 import TempleScene from './scenes/Game';
 import ArenaScene from './scenes/ArenaScene';
+import DarkWorldScene from './scenes/DarkWorldScene';
+import DarknessScene from './scenes/DarknessScene';
 
 const config = {
     type: AUTO,
@@ -28,6 +30,8 @@ const config = {
         IntroScene,
         TempleScene,
         ArenaScene,
+        DarkWorldScene,
+        DarknessScene,
     ],
 };
 

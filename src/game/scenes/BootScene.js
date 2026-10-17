@@ -2,6 +2,7 @@ import { Scene } from 'phaser';
 import { preloadSheets } from '../config/animationData';
 import { INTRO_ACTORS } from '../config/introActors';
 import { preloadIntroImages } from '../config/introData';
+import { DARKWORLD_BG, MINA_SHEETS } from '../config/actTwoData';
 
 export default class BootScene extends Scene {
     constructor() {
@@ -50,12 +51,59 @@ export default class BootScene extends Scene {
                 loadedHeroTextures.add(entry.texture);
             }
         });
+        this.load.image(DARKWORLD_BG.key, DARKWORLD_BG.file);
+        Object.entries(MINA_SHEETS.textures).forEach(([key, file]) => {
+            this.load.spritesheet(key, file, {
+                frameWidth: MINA_SHEETS.frameWidth,
+                frameHeight: MINA_SHEETS.frameHeight,
+                startFrame: 0,
+                endFrame: MINA_SHEETS.frameCount - 1,
+            });
+        });
         this.load.image('bg-menu', 'assets/backgrounds/menu.jpg');
         this.load.image('bg-temple', 'assets/backgrounds/temple.jpg');
         this.load.image('bg-arena', 'assets/backgrounds/arena.jpg');
     }
 
     create() {
+        Object.entries(MINA_SHEETS.textures).forEach(([textureKey]) => {
+            const animationKey = textureKey;
+            if (!this.anims.exists(animationKey)) {
+                this.anims.create({
+                    key: animationKey,
+                    frames: this.anims.generateFrameNumbers(textureKey, {
+                        start: 0,
+                        end: MINA_SHEETS.frameCount - 1,
+                    }),
+                    frameRate: MINA_SHEETS.fps,
+                    repeat: -1,
+                });
+            }
+        });
+        const requestedScene = typeof window !== 'undefined'
+            ? new URLSearchParams(window.location.search).get('scene')
+            : null;
+        if (import.meta.env.DEV && requestedScene === 'DarkWorld') {
+            if (this.registry.get('orbs') === undefined) {
+                this.registry.set('orbs', []);
+            }
+            this.scene.start('DarkWorldScene', { part: 'village' });
+            return;
+        }
+        if (import.meta.env.DEV && requestedScene === 'Arena') {
+            this.registry.set('bossIntroSeen', true);
+            this.scene.start('ArenaScene');
+            return;
+        }
+        if (import.meta.env.DEV && requestedScene === 'ArenaDefeat') {
+            this.registry.set('bossIntroSeen', true);
+            this.scene.start('ArenaScene');
+            return;
+        }
+        if (import.meta.env.DEV && requestedScene === 'Darkness') {
+            this.scene.start('DarknessScene');
+            return;
+        }
         this.scene.start('MainMenuScene');
     }
 }

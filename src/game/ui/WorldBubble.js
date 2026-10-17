@@ -26,7 +26,7 @@ export default class WorldBubble {
         this.safeBottom = 0;
         this.destroyed = false;
         this.slots = Array.from({ length: 2 }, () => this.createSlot());
-        this.onShutdown = () => this.destroy();
+        this.onShutdown = () => this.destroy(true);
         scene.events.once('shutdown', this.onShutdown);
     }
 
@@ -299,16 +299,28 @@ export default class WorldBubble {
         }
     }
 
-    destroy() {
+    destroy(fromShutdown = false) {
         if (this.destroyed) {
             return;
         }
         this.destroyed = true;
-        this.scene.events.off('shutdown', this.onShutdown);
-        this.clear();
-        for (const slot of this.slots) {
-            if (slot.container.active) {
-                slot.container.destroy();
+        const scene = this.scene;
+        scene.events.off('shutdown', this.onShutdown);
+        if (!fromShutdown && scene.sys.isActive()) {
+            this.clear();
+            for (const slot of this.slots) {
+                if (slot.container.active) {
+                    slot.container.destroy();
+                }
+            }
+        } else {
+            for (const slot of this.slots) {
+                if (slot.line) {
+                    slot.line.handle.cancelled = true;
+                    slot.line.handle.done = true;
+                    slot.line.done = true;
+                    slot.line = null;
+                }
             }
         }
         this.anchors.clear();

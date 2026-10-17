@@ -133,7 +133,7 @@ export const DARKNESS_SCENE = {
         { who: 'NARRATOR', text: 'And the world forgot the light.' },
     ],
     textColor: '#b9bbcf', fontSize: 26, y: 360,
-    endCard: { text: 'END OF ACT I', sub: 'The dark world awaits...', hold: 3.0, fadeIn: 1.0, fadeOut: 1.0 },
-    next: 'MainMenuScene',   // placeholder until Act II (Scene 6, the dark village) exists
+    endCard: { text: 'END OF ACT I', sub: 'The dark world awaits...', hold: 0, fadeIn: 1.0, fadeOut: 1.0 },
+    next: 'DarkWorldScene',
     registryFlag: 'actIComplete',
 };

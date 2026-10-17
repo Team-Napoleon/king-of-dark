@@ -7,7 +7,7 @@ import PlayerHud from '../ui/PlayerHud';
 import BeatRunner from '../story/BeatRunner';
 import WorldBubble from '../ui/WorldBubble';
 import { ACT1_PACING, ACT1_SPEAKERS, VOICE_STYLE } from '../config/actOneData';
-import { DEBUG_KEYS, HEALTH_ORB, HERO_STAND_PX, PORTAL, TEMPLE_WAVE } from '../config/animationData';
+import { DEBUG_KEYS, HEALTH_ORB, HERO_STAND_PX, PORTAL, TEMPLE_TOTAL, TEMPLE_WAVE } from '../config/animationData';
 
 export default class TempleScene extends Scene {
     constructor() {
@@ -36,6 +36,16 @@ export default class TempleScene extends Scene {
     create() {
         const worldWidth = this.backgroundWidth;
         const groundY = 690;
+        const modifierTotal = TEMPLE_WAVE.modifierWaves.reduce((total, wave) => total + wave.count, 0);
+        if (TEMPLE_WAVE.sequence.length !== 10 || modifierTotal !== TEMPLE_TOTAL) {
+            console.warn(
+                `[temple] spawn total mismatch: sequence=${TEMPLE_WAVE.sequence.length}, ` +
+                `expected=10, modifiers=${modifierTotal}, total=${TEMPLE_TOTAL}`
+            );
+        }
+        this.sceneElapsed = 0;
+        this.lastKillTime = 0;
+        this.noKillChaseForced = false;
 
         this.createTempleTile();
         this.cameras.main.setBackgroundColor('#000000');
@@ -76,13 +86,17 @@ export default class TempleScene extends Scene {
 
         this.enemies = [];
         this.defeatingEnemies = [];
-        this.enemyPool = TEMPLE_WAVE.sequence.map((type) => new Enemy(this, 0, 0, type));
+        this.enemyPool = Array.from({ length: TEMPLE_TOTAL }, (_unused, index) =>
+            new Enemy(this, 0, 0, TEMPLE_WAVE.sequence[index])
+        );
         this.enemyPool.forEach((enemy) => {
             this.physics.add.collider(enemy.sprite, this.floor);
         });
         this.spawnIndex = 0;
+        this.spawnTimer = TEMPLE_WAVE.spawn.firstDelay;
+        this.spawnSide = 1;
         this.kills = 0;
-        this.healthOrbs = Array.from({ length: TEMPLE_WAVE.sequence.length }, () => new HealthOrb(this, 660));
+        this.healthOrbs = Array.from({ length: TEMPLE_TOTAL }, () => new HealthOrb(this, 660));
         this.healTexts = Array.from({ length: 8 }, () => {
             const text = this.add.text(0, 0, '', {
                 fontFamily: 'Arial Black',
@@ -100,15 +114,14 @@ export default class TempleScene extends Scene {
         this.cameras.main.setDeadzone(120, 80);
 
         this.hud = new PlayerHud(this, this.player, { showControls: true, showKills: true });
-        this.hud.setKills(this.kills, TEMPLE_WAVE.sequence.length);
+        this.hud.setKills(this.kills, TEMPLE_TOTAL);
         this.debugGraphics = this.add.graphics().setDepth(200).setVisible(false);
         this.debugEnabled = false;
         if (DEBUG_KEYS) {
-            this.input.keyboard.addCapture('F3,F4,F5,F6');
+            this.input.keyboard.addCapture('F3,F4,F6,F10');
             this.debugKeys = this.input.keyboard.addKeys({
                 toggle: 'F3',
                 spawn: 'F4',
-                unlock: 'F5',
                 teleport: 'F6',
             });
             this.input.keyboard.addCapture('F10');
@@ -125,6 +138,23 @@ export default class TempleScene extends Scene {
         }
 
         this.events.once('shutdown', () => {
+            this.spawnTimer = 0;
+            this.spawnIndex = 0;
+            this.spawnSide = 1;
+            if (this.enemies) {
+                this.enemies.length = 0;
+            }
+            if (this.defeatingEnemies) {
+                this.defeatingEnemies.length = 0;
+            }
+            if (this.enemyPool) {
+                this.enemyPool.forEach((enemy) => {
+                    if (enemy.sprite && enemy.sprite.active) {
+                        enemy.sprite.body.enable = false;
+                    }
+                    enemy.inUse = false;
+                });
+            }
             if (this.debugStoryRunner) {
                 this.debugStoryRunner.destroy();
             }
@@ -158,34 +188,153 @@ export default class TempleScene extends Scene {
         }).setOrigin(0.5).setScrollFactor(0).setDepth(110).setVisible(false);
     }
 
-    createEnemy(type, x, y) {
+    createEnemy(type, x, y, hpMult = 1, speedMult = 1, biteDamageAdd = 0) {
         const enemy = this.enemyPool[this.spawnIndex];
-        if (!enemy || enemy.type !== type || !enemy.spawnAt(x, y)) {
+        if (!enemy || enemy.type !== type || !enemy.spawnAt(x, y, hpMult, speedMult, biteDamageAdd)) {
             return null;
         }
+        enemy.spawnId = this.spawnIndex + 1;
         this.enemies.push(enemy);
         this.spawnIndex += 1;
+        if (DEBUG_KEYS) {
+            console.log(`[spawn] ${this.spawnIndex}/${TEMPLE_TOTAL} ${type} alive=${this.enemies.length} x=${x.toFixed(1)}`);
+        }
         return enemy;
     }
 
-    updateWave() {
-        if (this.spawnIndex >= TEMPLE_WAVE.sequence.length || this.enemies.length >= TEMPLE_WAVE.maxAlive) {
+    getOffscreenX(preferredSide) {
+        const view = this.cameras.main.worldView;
+        const margin = TEMPLE_WAVE.spawn.offscreenMargin;
+        const minX = TEMPLE_WAVE.spawn.minWorldMargin;
+        const maxX = Math.min(
+            this.backgroundWidth - TEMPLE_WAVE.spawn.minWorldMargin,
+            PORTAL.wallX - TEMPLE_WAVE.spawn.minWorldMargin
+        );
+        let side = preferredSide;
+        let candidate = side < 0 ? view.x - margin : view.x + view.width + margin;
+        if (candidate < minX || candidate > maxX) {
+            side *= -1;
+            candidate = side < 0 ? view.x - margin : view.x + view.width + margin;
+        }
+        return Math.max(minX, Math.min(maxX, candidate));
+    }
+
+    getSpawnX() {
+        const x = this.getOffscreenX(this.spawnSide);
+        this.spawnSide *= -1;
+        return x;
+    }
+
+    updateEnemyRescue(delta) {
+        const heroX = this.player.sprite.body.center.x;
+        const floorSurface = this.floor.y - this.floor.height / 2;
+        const minX = TEMPLE_WAVE.spawn.minWorldMargin;
+        const maxX = PORTAL.wallX - TEMPLE_WAVE.spawn.minWorldMargin;
+        const invalidDuration = TEMPLE_WAVE.rescue.invalidPositionSeconds;
+        const dt = delta / 1000;
+
+        if (this.spawnIndex >= TEMPLE_TOTAL && this.enemies.length > 0 &&
+            !this.noKillChaseForced &&
+            this.sceneElapsed - this.lastKillTime >= TEMPLE_WAVE.rescue.noKillSecondsAfterAllSpawned) {
+            for (let index = 0; index < this.enemies.length; index += 1) {
+                const enemy = this.enemies[index];
+                if (enemy) {
+                    enemy.forceChase();
+                }
+            }
+            this.noKillChaseForced = true;
+        }
+
+        for (let index = 0; index < this.enemies.length; index += 1) {
+            const enemy = this.enemies[index];
+            if (!enemy || !enemy.inUse || enemy.isDefeated || !enemy.sprite?.active) {
+                continue;
+            }
+            const body = enemy.sprite.body;
+            const x = body.center.x;
+            const tooFar = Math.abs(x - heroX) > TEMPLE_WAVE.rescue.maxHeroDistance;
+            const outsidePlayfield = x < minX || x > maxX;
+            const belowFloor = body.bottom > floorSurface;
+            if (tooFar || outsidePlayfield || belowFloor) {
+                enemy.positionStallTimer += dt;
+            } else {
+                enemy.positionStallTimer = 0;
+            }
+            if (enemy.positionStallTimer < invalidDuration) {
+                continue;
+            }
+
+            const facingSide = this.player.facing < 0 ? -1 : 1;
+            const rescueX = this.getOffscreenX(facingSide);
+            if (enemy.rescueAt(rescueX, floorSurface) && DEBUG_KEYS) {
+                console.warn(`[rescue] id=${enemy.spawnId} x=${rescueX.toFixed(1)}`);
+            }
+        }
+    }
+
+    updateSpawner(delta) {
+        if (this.spawnIndex >= TEMPLE_TOTAL) {
             return;
         }
-        const triggerX = TEMPLE_WAVE.firstTriggerX + this.spawnIndex * TEMPLE_WAVE.triggerSpacing;
-        if (this.player.sprite.x < triggerX) {
+        this.spawnTimer = Math.max(0, this.spawnTimer - delta / 1000);
+        if (this.spawnTimer > 0) {
             return;
         }
-        const spawnX = Math.min(this.player.sprite.x + TEMPLE_WAVE.spawnAhead, TEMPLE_WAVE.maxSpawnX);
-        this.createEnemy(TEMPLE_WAVE.sequence[this.spawnIndex], spawnX, 600);
+        if (this.enemies.length >= TEMPLE_WAVE.spawn.maxAlive) {
+            if (DEBUG_KEYS) {
+                console.log(`[spawn] retry blocked: maxAlive=${TEMPLE_WAVE.spawn.maxAlive}`);
+            }
+            this.spawnTimer = TEMPLE_WAVE.spawn.retryEvery;
+            return;
+        }
+        const type = TEMPLE_WAVE.sequence[this.spawnIndex];
+        const modifiers = this.getSpawnModifiers(this.spawnIndex);
+        if (this.createEnemy(
+            type,
+            this.getSpawnX(),
+            TEMPLE_WAVE.spawn.spawnY,
+            modifiers.hpMult,
+            modifiers.speedMult,
+            modifiers.biteDamageAdd
+        )) {
+            const jitter = (Math.random() * 2 - 1) * TEMPLE_WAVE.spawn.jitter;
+            this.spawnTimer = TEMPLE_WAVE.spawn.interval + jitter;
+        } else {
+            if (DEBUG_KEYS) {
+                console.warn(`[spawn] retry blocked: pool unavailable at ${this.spawnIndex + 1}/${TEMPLE_TOTAL}`);
+            }
+            this.spawnTimer = TEMPLE_WAVE.spawn.retryEvery;
+        }
+    }
+
+    getSpawnModifiers(index) {
+        const waves = TEMPLE_WAVE.modifierWaves;
+        let firstWaveCount = 0;
+        for (let waveIndex = 0; waveIndex < waves.length; waveIndex += 1) {
+            firstWaveCount += waves[waveIndex].count;
+            if (index < firstWaveCount) {
+                return waves[waveIndex];
+            }
+        }
+        return waves[waves.length - 1];
     }
 
     spawnNextEnemyNow() {
-        if (this.enemies.length >= TEMPLE_WAVE.maxAlive || this.spawnIndex >= TEMPLE_WAVE.sequence.length) {
+        if (this.enemies.length >= TEMPLE_WAVE.spawn.maxAlive || this.spawnIndex >= TEMPLE_TOTAL) {
             return;
         }
-        const x = Math.min(this.player.sprite.x + TEMPLE_WAVE.spawnAhead, TEMPLE_WAVE.maxSpawnX);
-        this.createEnemy(TEMPLE_WAVE.sequence[this.spawnIndex], x, 600);
+        const modifiers = this.getSpawnModifiers(this.spawnIndex);
+        if (this.createEnemy(
+            TEMPLE_WAVE.sequence[this.spawnIndex],
+            this.getSpawnX(),
+            TEMPLE_WAVE.spawn.spawnY,
+            modifiers.hpMult,
+            modifiers.speedMult,
+            modifiers.biteDamageAdd
+        )) {
+            const jitter = (Math.random() * 2 - 1) * TEMPLE_WAVE.spawn.jitter;
+            this.spawnTimer = TEMPLE_WAVE.spawn.interval + jitter;
+        }
     }
 
     onEnemyDefeated(enemy) {
@@ -199,7 +348,9 @@ export default class TempleScene extends Scene {
         }
         this.defeatingEnemies.push(enemy);
         this.kills += 1;
-        this.hud.setKills(this.kills, TEMPLE_WAVE.sequence.length);
+        this.hud.setKills(this.kills, TEMPLE_TOTAL);
+        this.lastKillTime = this.sceneElapsed;
+        this.noKillChaseForced = false;
         if (Math.random() <= enemy.config.dropChance) {
             this.dropHealthOrb(enemy.sprite.x, enemy.sprite.y);
         }
@@ -320,7 +471,9 @@ export default class TempleScene extends Scene {
             ring.rotation = this.portalRotation * (index === 1 ? -0.7 : 1 + index * 0.2);
         }
 
-        if (!this.portalUnlocked && this.kills >= TEMPLE_WAVE.sequence.length) {
+        if (!this.portalUnlocked &&
+            this.spawnIndex >= TEMPLE_TOTAL &&
+            this.kills >= TEMPLE_TOTAL) {
             this.portalUnlocked = true;
             this.portalBurstTimer = 0.7;
         }
@@ -412,11 +565,11 @@ export default class TempleScene extends Scene {
     }
 
     update(time, delta) {
+        this.sceneElapsed += delta / 1000;
         this.tileBackground.tilePositionX = this.cameras.main.scrollX * 0.5;
         this.darkness.update(delta);
         this.player.update(delta);
 
-        this.updateWave();
         for (let index = 0; index < this.enemies.length; index += 1) {
             this.enemies[index].update(this.player, delta);
         }
@@ -426,6 +579,8 @@ export default class TempleScene extends Scene {
             }
         }
         this.updateHealthOrbs(delta);
+        this.updateSpawner(delta);
+        this.updateEnemyRescue(delta);
 
         if (DEBUG_KEYS) {
             if (Input.Keyboard.JustDown(this.storyTestKey)) {
@@ -465,12 +620,6 @@ export default class TempleScene extends Scene {
             if (Input.Keyboard.JustDown(this.debugKeys.spawn)) {
                 this.spawnNextEnemyNow();
             }
-            if (Input.Keyboard.JustDown(this.debugKeys.unlock)) {
-                this.kills = TEMPLE_WAVE.sequence.length;
-                this.hud.setKills(this.kills, TEMPLE_WAVE.sequence.length);
-                this.portalUnlocked = true;
-                this.portalBurstTimer = 0.7;
-            }
             if (Input.Keyboard.JustDown(this.debugKeys.teleport)) {
                 this.player.sprite.setPosition(5300, this.player.sprite.y);
                 this.player.sprite.body.reset(5300, this.player.sprite.y);
@@ -493,7 +642,7 @@ export default class TempleScene extends Scene {
         if (this.player.isGameOver && !this.gameOverShown) {
             this.triggerGameOver();
         }
-        if (this.gameOverText && this.gameOverText.active && Input.Keyboard.JustDown(this.restartKey)) {
+        if (Input.Keyboard.JustDown(this.restartKey)) {
             this.scene.restart();
         }
 

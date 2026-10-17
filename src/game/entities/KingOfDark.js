@@ -49,36 +49,6 @@ export default class KingOfDark {
         this.eyeLeft = scene.add.ellipse(x - 30, y + 40, 24, 12, 0xa76bff, 0.9).setDepth(52);
         this.eyeRight = scene.add.ellipse(x + 30, y + 40, 24, 12, 0xa76bff, 0.9).setDepth(52);
         this.attackMarker = scene.add.graphics().setDepth(52).setVisible(false);
-        this.deathCircle = scene.add.circle(x, y, 1, 0x000000, 1)
-            .setDepth(120)
-            .setVisible(false)
-            .setScale(0);
-        this.deathTween = scene.tweens.add({
-            targets: this.deathCircle,
-            scaleX: 1400,
-            scaleY: 1400,
-            duration: KING.deathExpand * 1000,
-            paused: true,
-            persist: true,
-            onComplete: () => {
-                if (!this.deathCircle || !this.deathCircle.active || !this.scene || !this.scene.sys.isActive()) {
-                    return;
-                }
-                this.scene.events.emit('boss-defeated', this);
-            },
-        });
-
-        scene.events.once('shutdown', () => {
-            if (!this.deathCircle || !this.deathCircle.active) {
-                return;
-            }
-            if (this.deathTween) {
-                this.deathTween.stop();
-            }
-            if (this.deathStage === 'freeze' && this.scene && this.scene.physics) {
-                this.scene.physics.world.resume();
-            }
-        });
         this.poseVisual(0);
     }
 
@@ -154,7 +124,6 @@ export default class KingOfDark {
         const seconds = delta / 1000;
         this.elapsed += seconds;
         if (this.deathStage) {
-            this.updateDeath(seconds);
             return;
         }
         if (this.isDefeated) {
@@ -412,30 +381,14 @@ export default class KingOfDark {
         this.combatStarted = false;
         this.untargetable = true;
         this.sprite.body.enable = false;
-        this.scene.physics.world.pause();
+        this.currentAttack = null;
+        this.currentAttackName = null;
+        this.state = 'defeated';
+        this.deathStage = 'defeated';
         if (this.scene.player && this.scene.player.sprite && this.scene.player.sprite.active) {
             this.scene.player.controlsLocked = true;
             this.scene.player.sprite.body.setVelocity(0, 0);
         }
-        this.deathStage = 'freeze';
-        this.deathTimer = KING.deathFreeze;
-    }
-
-    updateDeath(seconds) {
-        if (this.deathStage !== 'freeze') {
-            return;
-        }
-        this.deathTimer = Math.max(0, this.deathTimer - seconds);
-        if (this.deathTimer > 0) {
-            return;
-        }
-        this.scene.physics.world.resume();
-        this.scene.cameras.main.flash(350, 255, 255, 255);
-        this.scene.cameras.main.shake(350, 0.012);
-        this.deathCircle.setPosition(this.sprite.x, this.sprite.y + KING.body.height / 2);
-        this.deathCircle.setScale(0);
-        this.deathCircle.setVisible(true);
-        this.deathStage = 'expand';
-        this.deathTween.restart();
+        this.scene.events.emit('boss-defeated', this);
     }
 }

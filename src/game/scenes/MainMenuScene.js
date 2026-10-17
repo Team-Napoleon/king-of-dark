@@ -1,4 +1,5 @@
-import { Scene } from 'phaser';
+import { Input, Scene } from 'phaser';
+import { DEBUG_KEYS } from '../config/animationData';
 
 export default class MainMenuScene extends Scene {
     constructor() {
@@ -7,6 +8,11 @@ export default class MainMenuScene extends Scene {
 
     create() {
         const { width, height } = this.scale;
+        if (DEBUG_KEYS) {
+            this.debugDarkWorld = this.input.keyboard.addKey('F2');
+            this.debugDarkness = this.input.keyboard.addKey('F3');
+            this.input.keyboard.addCapture('F2,F3');
+        }
 
         this.cameras.main.setBackgroundColor('#090b11');
         this.cameras.main.fadeIn(600);
@@ -78,5 +84,18 @@ export default class MainMenuScene extends Scene {
         });
 
         buttonBg.on('pointerdown', handlePlay);
+    }
+
+    update() {
+        if (!DEBUG_KEYS || this.isStarting || !this.sys.isActive()) {
+            return;
+        }
+        if (Input.Keyboard.JustDown(this.debugDarkWorld)) {
+            this.isStarting = true;
+            this.scene.start('DarkWorldScene', { part: 'village' });
+        } else if (Input.Keyboard.JustDown(this.debugDarkness)) {
+            this.isStarting = true;
+            this.scene.start('DarknessScene');
+        }
     }
 }

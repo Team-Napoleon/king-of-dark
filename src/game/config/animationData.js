@@ -33,8 +33,9 @@ export const GLOAM_SHEETS = {
 export const GLOAM = {
     heightRatio: 0.55,
     health: 70,
-    speedMult: { patrol: 0.30, run: 0.55, chase: 0.75 },
-    aggroRangeH: 3.0,
+    speedMult: { patrol: 0.5, run: 0.85, chase: 1.0 },
+    maxClipSpeed: 1.6,
+    aggroRangeH: 4.5,
     castRangeH: 2.2,
     snatchReachH: 1.6,
     closeRangeH: 0.9,
@@ -43,7 +44,29 @@ export const GLOAM = {
     bodyWidthRatio: 0.70,
     bodyHeightRatio: 0.80,
     snatch: { speed: 1.15, strikeFrame: 16, vulnerableFrom: 17, lastFrame: 32, closeDamage: 14,
-              first: 2.5, interval: 4.5, jitter: 1.2, postponeIfShadowed: 1.5, interruptRestart: 3.0 },
+              first: 2.5, interval: 4.5, jitter: 1.2, postponeIfShadowed: 1.5, interruptRestart: 3.0, enabled: false },
+    bite: {
+        startFrame: 8,
+        strikeFrame: 16,
+        vulnerableFrom: 17,
+        lastFrame: 32,
+        speed: 2.2,
+        reachH: 0.8,
+        verticalH: 0.5,
+        damage: 12,
+        cooldown: 1.4,
+        jitter: 0.3,
+        interruptRestart: 1.0,
+        triggerRangeH: 1.0,
+        vulnerableStun: 0.8,
+        interruptDamageMult: 0.35,
+        markWidth: 44,
+        markHeight: 8,
+        markAlpha: 0.9,
+        markColor: 0xff3030,
+        markFade: 0.45,
+        markFloorOffset: 2,
+    },
     materialize: 0.6,
 };
 
@@ -220,7 +243,7 @@ export const ENEMY_TYPES = {
     },
 };
 export const HEALTH_ORB = {
-    heal: 15,
+    heal: 20,
     pickupRadiusX: 76.8,
     pickupRadiusY: 112,
     radius: 8,
@@ -229,16 +252,31 @@ export const HEALTH_ORB = {
     bobHeight: 3,
 };
 
-// 10 monsters, one after another. Max 2 alive. Next spawns once the hero passes its trigger x.
+// Ten pooled monsters spawn on a scene timer; wave modifiers preserve the Act I wave split.
 export const TEMPLE_WAVE = {
-    sequence: ['gloam', 'gloam', 'gloam', 'brute', 'gloam', 'gloam', 'brute', 'gloam', 'gloam', 'brute'],
-    maxAlive: 2,
-    firstTriggerX: 500,
-    triggerSpacing: 430,
-    spawnAhead: 700,        // px ahead of the hero (off screen)
-    maxSpawnX: 5450,
-    materialize: 0.6,       // seconds fading in, untargetable
+    sequence: ['gloam', 'gloam', 'gloam', 'gloam', 'gloam', 'gloam', 'gloam', 'gloam', 'gloam', 'gloam'],
+    spawn: {
+        firstDelay: 1.5,
+        interval: 2.6,
+        jitter: 0.4,
+        maxAlive: 4,
+        retryEvery: 0.3,
+        offscreenMargin: 140,
+        materialize: 0.35,
+        minWorldMargin: 60,
+        spawnY: 600,
+    },
+    rescue: {
+        maxHeroDistance: 1400,
+        invalidPositionSeconds: 3,
+        noKillSecondsAfterAllSpawned: 25,
+    },
+    modifierWaves: [
+        { count: 4, hpMult: 1.0, speedMult: 1.0, biteDamageAdd: 0 },
+        { count: 6, hpMult: 1.4, speedMult: 1.1, biteDamageAdd: 2 },
+    ],
 };
+export const TEMPLE_TOTAL = TEMPLE_WAVE.sequence.length;
 
 export const PORTAL = {
     x: 5600,

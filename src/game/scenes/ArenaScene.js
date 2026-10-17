@@ -5,7 +5,10 @@ import Player from '../entities/Player';
 import DialogueBox from '../ui/DialogueBox';
 import Letterbox from '../ui/Letterbox';
 import PlayerHud from '../ui/PlayerHud';
-import { BOSS_INTRO, DEBUG_KEYS, KING, KING_ATTACKS } from '../config/animationData';
+import WorldBubble from '../ui/WorldBubble';
+import { ARENA_DEFEAT, ACT1_PACING, ACT1_SPEAKERS } from '../config/actOneData';
+import { BOSS_INTRO, DEBUG_KEYS, HERO_STAND_PX, KING, KING_ATTACKS } from '../config/animationData';
+import { createRevealSchedule } from '../ui/SpeechBubble';
 
 export default class ArenaScene extends Scene {
     constructor() {
@@ -51,11 +54,12 @@ export default class ArenaScene extends Scene {
         this.debugGraphics = this.add.graphics().setDepth(200).setVisible(false);
         this.debugEnabled = false;
         if (DEBUG_KEYS) {
-            this.input.keyboard.addCapture('F3,F7,F8');
+            this.input.keyboard.addCapture('F3,F7,F8,F11');
             this.debugKeys = this.input.keyboard.addKeys({
                 toggle: 'F3',
                 bossPhaseOne: 'F7',
                 bossPhaseTwo: 'F8',
+                defeat: 'F11',
             });
         }
         this.physics.add.collider(this.boss.sprite, this.floor);
@@ -71,17 +75,50 @@ export default class ArenaScene extends Scene {
             strokeThickness: 8,
             align: 'center',
         }).setOrigin(0.5).setScrollFactor(0).setDepth(110).setVisible(false);
-        this.victoryText = this.add.text(640, 360, 'THE DARKNESS SPREADS...', {
-            fontFamily: 'Arial Black',
-            fontSize: '36px',
-            color: '#f5d7a1',
-            stroke: '#000000',
-            strokeThickness: 8,
-            align: 'center',
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(130).setVisible(false);
+        this.defeatOverlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 1)
+            .setScrollFactor(0)
+            .setDepth(140)
+            .setVisible(false);
+        this.defeatSmoke = Array.from({ length: ARENA_DEFEAT.smoke.puffCount }, () =>
+            this.add.circle(0, 0, 8, ARENA_DEFEAT.smoke.color, 0).setDepth(125).setVisible(false)
+        );
+        this.defeatBubble = new WorldBubble(this, {
+            speakers: ACT1_SPEAKERS,
+            pacing: ACT1_PACING,
+            voiceStyle: { y: 150, maxWidth: 420, fontStyle: 'italic', textColor: '#d9c8ff', glowColor: 0x7a3cff },
+        });
+        this.defeatBubble.setAnchor('hero', () => ({
+            x: this.player.sprite.body.center.x,
+            y: this.player.sprite.body.bottom - HERO_STAND_PX - 10,
+        }));
+        this.defeatBubble.setAnchor('king', () => ({
+            x: this.boss.visual.x,
+            y: this.boss.visual.y - KING.body.height * 0.62,
+        }));
+        const lineDuration = (line) => {
+            const schedule = createRevealSchedule(line.text, ACT1_PACING, { pauseAfterLast: false });
+            return schedule.totalDuration + ACT1_PACING.hold + ACT1_PACING.fadeOut + ACT1_PACING.gap;
+        };
+        this.defeatKingLineDuration = lineDuration(ARENA_DEFEAT.kingLine);
+        this.defeatHeroLineDuration = lineDuration(ARENA_DEFEAT.heroLine);
+        this.defeatTimeout = ARENA_DEFEAT.kneel.seconds +
+            this.defeatKingLineDuration +
+            ARENA_DEFEAT.smoke.erupt + ARENA_DEFEAT.smoke.floodSeconds +
+            ARENA_DEFEAT.heroStagger.seconds +
+            this.defeatHeroLineDuration +
+            ARENA_DEFEAT.swallow.seconds + ARENA_DEFEAT.holdBlack + 5;
         this.bossDefeatedSequence = false;
+        this.defeatTransitionStarted = false;
+        this.defeatElapsed = 0;
+        this.defeatStep = -1;
+        this.defeatStepElapsed = 0;
+        this.defeatLine = null;
+        this.defeatSmokeElapsed = 0;
+        this.defeatHeroBaseX = 0;
+        this.defeatHeroBaseY = 0;
+        this.defeatKingBaseRotation = 0;
         this.events.once('boss-defeated', () => {
-            if (!this.victoryText || !this.victoryText.active) {
+            if (!this.sys.isActive()) {
                 return;
             }
             this.handleBossDefeated();
@@ -124,10 +161,22 @@ export default class ArenaScene extends Scene {
         } else {
             this.startIntro();
         }
+        const forceDefeat = import.meta.env.DEV &&
+            new URLSearchParams(window.location.search).get('scene') === 'ArenaDefeat';
+        if (forceDefeat) {
+            this.time.delayedCall(0, () => {
+                if (this.sys.isActive() && this.boss && this.boss.sprite.active) {
+                    this.boss.defeat();
+                }
+            });
+        }
 
         this.events.once('shutdown', () => {
             if (this.hud) {
                 this.hud.destroy();
+            }
+            if (this.defeatBubble) {
+                this.defeatBubble.destroy();
             }
         });
         this.events.once('shutdown', () => {
@@ -257,19 +306,172 @@ export default class ArenaScene extends Scene {
     }
 
     handleBossDefeated() {
-        if (this.bossDefeatedSequence || !this.victoryText || !this.victoryText.active) {
+        if (this.bossDefeatedSequence || !this.sys.isActive()) {
             return;
         }
         this.bossDefeatedSequence = true;
         this.registry.set('bossDefeated', true);
         this.player.controlsLocked = true;
+        this.player.sprite.body.setVelocity(0, 0);
         this.setBossHudVisible(false);
-        this.victoryText.setVisible(true);
-        this.physics.world.pause();
+        this.defeatElapsed = 0;
+        this.defeatStep = -1;
+        this.advanceDefeatStep();
+    }
+
+    advanceDefeatStep() {
+        this.defeatStep += 1;
+        this.defeatStepElapsed = 0;
+        this.defeatLine = null;
+        switch (this.defeatStep) {
+            case 0:
+                this.defeatKingBaseRotation = this.boss.visual.rotation;
+                this.defeatKingBaseY = this.boss.visual.y;
+                break;
+            case 1:
+                this.defeatLine = this.defeatBubble.say(ARENA_DEFEAT.kingLine);
+                break;
+            case 2:
+                this.defeatSmokeElapsed = 0;
+                this.defeatSmokeStartX = this.boss.sprite.x;
+                this.defeatSmokeStartY = this.boss.sprite.body.bottom - KING.body.height * 0.42;
+                this.defeatSmokeEndX = this.player.sprite.body.center.x;
+                this.defeatSmokeEndY = this.player.sprite.body.bottom - HERO_STAND_PX * 0.35;
+                for (let index = 0; index < this.defeatSmoke.length; index += 1) {
+                    this.defeatSmoke[index].setVisible(false).setAlpha(0);
+                }
+                break;
+            case 3:
+                this.defeatHeroBaseX = this.player.sprite.body.center.x;
+                this.defeatHeroBaseY = this.player.sprite.body.bottom;
+                break;
+            case 4:
+                this.defeatLine = this.defeatBubble.say(ARENA_DEFEAT.heroLine);
+                break;
+            case 5:
+                this.defeatOverlay.setVisible(true).setAlpha(0);
+                break;
+            case 6:
+                this.defeatOverlay.setAlpha(1).setVisible(true);
+                break;
+            default:
+                this.startDarknessScene();
+                break;
+        }
+    }
+
+    updateDefeatSmoke() {
+        const smoke = ARENA_DEFEAT.smoke;
+        const elapsed = this.defeatStepElapsed;
+        const emissionProgress = Math.min(1, elapsed / smoke.erupt);
+        const visibleCount = Math.floor(this.defeatSmoke.length * emissionProgress);
+        const floodProgress = Math.min(1, Math.max(0, (elapsed - smoke.erupt) / smoke.floodSeconds));
+        for (let index = 0; index < this.defeatSmoke.length; index += 1) {
+            const puff = this.defeatSmoke[index];
+            if (index >= visibleCount) {
+                continue;
+            }
+            const localProgress = Math.min(1, Math.max(0, (elapsed - (index / this.defeatSmoke.length) * smoke.erupt) / smoke.floodSeconds));
+            const drift = localProgress * localProgress;
+            const spread = Math.sin(index * 2.4) * 38;
+            puff.setVisible(true);
+            puff.setPosition(
+                this.defeatSmokeStartX + (this.defeatSmokeEndX - this.defeatSmokeStartX) * drift + spread,
+                this.defeatSmokeStartY + (this.defeatSmokeEndY - this.defeatSmokeStartY) * drift + Math.cos(index * 1.7) * (24 + floodProgress * 45)
+            );
+            puff.setRadius(8 + floodProgress * 42 + (index % 4) * 3);
+            puff.setAlpha(Math.min(0.82, 0.25 + floodProgress * 0.57));
+        }
+    }
+
+    updateDefeatSequence(delta) {
+        if (!this.bossDefeatedSequence || this.defeatTransitionStarted) {
+            return;
+        }
+        const seconds = Math.max(0, delta / 1000);
+        this.defeatElapsed += seconds;
+        this.defeatStepElapsed += seconds;
+        if (this.defeatElapsed >= this.defeatTimeout) {
+            this.startDarknessScene();
+            return;
+        }
+
+        switch (this.defeatStep) {
+            case 0: {
+                const progress = Math.min(1, this.defeatStepElapsed / ARENA_DEFEAT.kneel.seconds);
+                this.boss.visual.setRotation(this.defeatKingBaseRotation + progress * 0.72);
+                this.boss.visual.y = this.defeatKingBaseY + progress * ARENA_DEFEAT.kneel.dropPx;
+                if (progress >= 1) this.advanceDefeatStep();
+                break;
+            }
+            case 1:
+                if (this.defeatLine && this.defeatLine.done) {
+                    this.advanceDefeatStep();
+                } else if (this.defeatStepElapsed >= this.defeatKingLineDuration) {
+                    this.defeatBubble.clear();
+                    this.advanceDefeatStep();
+                }
+                break;
+            case 2: {
+                const total = ARENA_DEFEAT.smoke.erupt + ARENA_DEFEAT.smoke.floodSeconds;
+                this.updateDefeatSmoke();
+                if (this.defeatStepElapsed >= total) this.advanceDefeatStep();
+                break;
+            }
+            case 3: {
+                const fx = ARENA_DEFEAT.heroStagger;
+                const progress = Math.min(1, this.defeatStepElapsed / fx.seconds);
+                const sway = Math.sin(this.defeatStepElapsed * Math.PI * 9) * fx.swayPx * (1 - progress);
+                this.player.visual.setPosition(this.defeatHeroBaseX + sway, this.defeatHeroBaseY);
+                const red = Math.round(255 + ((fx.tintTo >> 16 & 255) - 255) * progress);
+                const green = Math.round(255 + ((fx.tintTo >> 8 & 255) - 255) * progress);
+                const blue = Math.round(255 + ((fx.tintTo & 255) - 255) * progress);
+                this.player.visual.setTint(red << 16 | green << 8 | blue);
+                if (progress >= 1) this.advanceDefeatStep();
+                break;
+            }
+            case 4:
+                if (this.defeatLine && this.defeatLine.done) {
+                    this.advanceDefeatStep();
+                } else if (this.defeatStepElapsed >= this.defeatHeroLineDuration) {
+                    this.defeatBubble.clear();
+                    this.advanceDefeatStep();
+                }
+                break;
+            case 5: {
+                const progress = Math.min(1, this.defeatStepElapsed / ARENA_DEFEAT.swallow.seconds);
+                this.defeatOverlay.setAlpha(progress);
+                if (progress >= 1) this.advanceDefeatStep();
+                break;
+            }
+            case 6:
+                if (this.defeatStepElapsed >= ARENA_DEFEAT.holdBlack) this.advanceDefeatStep();
+                break;
+            default:
+                this.startDarknessScene();
+                break;
+        }
+    }
+
+    startDarknessScene() {
+        if (this.defeatTransitionStarted || !this.sys.isActive()) {
+            return;
+        }
+        this.defeatTransitionStarted = true;
+        this.registry.set('bossDefeated', true);
+        if (import.meta.env.DEV) console.log('[flow] ArenaScene -> DarknessScene');
+        this.scene.start(ARENA_DEFEAT.next);
     }
 
     update(time, delta) {
+        if (Input.Keyboard.JustDown(this.restartKey)) {
+            this.defeatBubble.destroy();
+            this.scene.restart();
+            return;
+        }
         if (this.bossDefeatedSequence) {
+            this.defeatBubble.update(delta / 1000);
+            this.updateDefeatSequence(delta);
             return;
         }
         this.darkness.update(delta);
@@ -295,6 +497,9 @@ export default class ArenaScene extends Scene {
             if (Input.Keyboard.JustDown(this.debugKeys.bossPhaseTwo)) {
                 this.boss.health = 1;
             }
+            if (Input.Keyboard.JustDown(this.debugKeys.defeat)) {
+                this.boss.defeat();
+            }
         }
         this.player.update(delta);
         this.boss.update(this.player, delta);
@@ -307,9 +512,6 @@ export default class ArenaScene extends Scene {
         }
         if (this.player.isGameOver && !this.gameOverShown) {
             this.triggerGameOver();
-        }
-        if (this.gameOverText && this.gameOverText.active && Input.Keyboard.JustDown(this.restartKey)) {
-            this.scene.restart();
         }
     }
 

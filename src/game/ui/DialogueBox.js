@@ -31,7 +31,12 @@ export default class DialogueBox {
             wordWrap: { width: 920 },
         }).setScrollFactor(0).setDepth(111).setVisible(false);
 
-        scene.events.once('shutdown', () => this.destroy());
+        scene.events.once('shutdown', () => {
+            if (!this.panel || !this.panel.active) {
+                return;
+            }
+            this.destroy();
+        });
     }
 
     show(lines, { onComplete } = {}) {

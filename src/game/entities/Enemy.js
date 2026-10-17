@@ -1,234 +1,338 @@
-const ENEMY_TYPES = {
-    grunt: {
-        health: 60,
-        width: 44,
-        height: 56,
-        color: 0xd47467,
-        speed: 90,
-        damage: 15,
-        range: 70,
-        dropChance: 0.6,
-    },
-    brute: {
-        health: 120,
-        width: 62,
-        height: 80,
-        color: 0x8c3b3b,
-        speed: 55,
-        damage: 28,
-        range: 90,
-        dropChance: 1,
-    },
-};
+import { BlendModes, Math as PhaserMath } from 'phaser';
+import { ENEMY_TYPES, SHADOW, TEMPLE_WAVE } from '../config/animationData';
 
 export default class Enemy {
-    constructor(scene, x, y, type = 'grunt') {
+    constructor(scene, x, y, type = 'imp') {
         this.scene = scene;
-        this.type = ENEMY_TYPES[type] ? type : 'grunt';
-        this.config = ENEMY_TYPES[this.type];
-        this.maxHealth = this.config.health;
+        this.type = type;
+        this.config = ENEMY_TYPES[type];
+        this.maxHealth = this.config.hp;
         this.health = this.maxHealth;
-        this.speed = this.config.speed;
-        this.damage = this.config.damage;
-        this.range = this.config.range;
-        this.hitHalfWidth = 30;
-        this.hitHalfHeight = 26;
-        this.spawnX = x;
-        this.patrolDirection = 1;
-        this.facing = 1;
-        this.attackCooldown = 0;
-        this.telegraphTimer = 0;
+        this.hitHalfWidth = this.config.hitHalfWidth;
+        this.hitHalfHeight = this.config.hitHalfHeight;
+        this.isDefeated = false;
+        this.untargetable = true;
+        this.inUse = false;
+        this.state = 'inactive';
+        this.stateTimer = 0;
+        this.castTimer = 0;
+        this.castTelegraphTimer = 0;
+        this.meleeTimer = 0;
+        this.meleeCooldown = 0;
         this.stunTimer = 0;
         this.flashTimer = 0;
-        this.isDefeated = false;
+        this.defeatTimer = 0;
+        this.elapsed = 0;
+        this.visualAlpha = 0;
+        this.facing = -1;
 
-        this.sprite = scene.add.rectangle(x, y, this.config.width, this.config.height, this.config.color);
-        this.sprite.setStrokeStyle(3, 0x2a1a17).setDepth(5);
+        this.sprite = scene.add.rectangle(x, y, this.config.width, this.config.height, 0, 0).setVisible(false);
         scene.physics.add.existing(this.sprite);
+        this.sprite.body.setSize(this.config.width, this.config.height);
         this.sprite.body.setAllowGravity(true);
         this.sprite.body.setImmovable(false);
-        this.sprite.body.setCollideWorldBounds(true);
-        this.sprite.body.setMaxVelocity(220, 950);
-        this.sprite.body.setDragX(700);
-        this.sprite.body.setBounce(0);
+        this.sprite.body.setCollideWorldBounds(false);
+        this.sprite.body.setMaxVelocity(this.config.speed, 950);
+        this.sprite.body.enable = false;
 
-        const barY = y - this.config.height / 2 - 17;
-        this.healthBarBack = scene.add.rectangle(x, barY, 50, 6, 0x170d12).setDepth(6);
-        this.healthBar = scene.add.rectangle(x - 24, barY, 46, 4, 0xe75f5f)
-            .setOrigin(0, 0.5)
-            .setDepth(7);
-        this.eyeTop = scene.add.rectangle(x + 5, y - 8, 7, 4, 0xffcf6a).setDepth(52);
-        this.eyeBottom = scene.add.rectangle(x + 5, y - 2, 7, 4, 0xffcf6a).setDepth(52);
-        this.telegraph = scene.add.rectangle(x, y, this.config.width + 38, 7, 0xffe066, 0.9)
+        this.aura = scene.add.graphics().setDepth(4).setBlendMode(BlendModes.ADD).setVisible(false);
+        this.visual = scene.add.graphics().setDepth(5).setVisible(false);
+        this.readable = scene.add.graphics().setDepth(52).setVisible(false);
+        this.castBurst = scene.add.ellipse(0, 0, 56, 56, 0x000000, 0)
+            .setStrokeStyle(4, 0xc084ff, 1)
             .setDepth(52)
             .setVisible(false);
+        this.castBurstTimer = 0;
+        this.meleeFlash = scene.add.rectangle(0, 0, this.config.melee.range * 2, 7, 0xffe066, 0.9)
+            .setDepth(52)
+            .setVisible(false);
+        this.healthBack = scene.add.rectangle(0, 0, this.config.width + 16, 6, 0x170d12, 0.95)
+            .setDepth(7)
+            .setVisible(false);
+        this.healthBar = scene.add.rectangle(0, 0, this.config.width + 12, 4, 0x78e495)
+            .setOrigin(0, 0.5)
+            .setDepth(8)
+            .setVisible(false);
 
-        this.healthOrb = scene.add.circle(x, y, 10, 0x73e58c, 1).setDepth(52).setVisible(false);
-        scene.physics.add.existing(this.healthOrb);
-        this.healthOrb.body.setAllowGravity(false);
-        this.healthOrb.body.setImmovable(true);
-        this.healthOrb.body.enable = false;
-        this.orbTween = scene.tweens.add({
-            targets: this.healthOrb,
-            y: y - 12,
-            duration: 450,
-            yoyo: true,
-            repeat: -1,
-            paused: true,
-        });
-        this.defeatTween = scene.tweens.add({
-            targets: this.sprite,
-            alpha: 0,
-            scaleY: 0.2,
-            duration: 250,
-            paused: true,
-            persist: true,
-            onComplete: () => {
-                if (this.sprite && this.sprite.active) {
-                    this.sprite.destroy();
-                }
-                this.destroyVisuals();
-            },
-        });
+        this.leftHornPoints = Array.from({ length: 7 }, () => new PhaserMath.Vector2());
+        this.rightHornPoints = Array.from({ length: 7 }, () => new PhaserMath.Vector2());
+        this.leftSpikePoints = Array.from({ length: 3 }, () => new PhaserMath.Vector2());
+        this.rightSpikePoints = Array.from({ length: 3 }, () => new PhaserMath.Vector2());
+    }
 
-        this.scene.events.once('shutdown', () => {
-            if (!this.scene) {
-                return;
-            }
-            this.orbTween.stop();
-            this.defeatTween.stop();
-        });
+    spawnAt(x, y) {
+        if (!this.sprite || !this.sprite.active || this.inUse) {
+            return false;
+        }
+        this.sprite.body.enable = true;
+        this.sprite.body.reset(x, y);
+        this.sprite.body.setVelocity(0, 0);
+        this.health = this.maxHealth;
+        this.isDefeated = false;
+        this.untargetable = true;
+        this.inUse = true;
+        this.state = 'materialize';
+        this.stateTimer = TEMPLE_WAVE.materialize;
+        this.castTelegraphTimer = 0;
+        this.meleeTimer = 0;
+        this.meleeCooldown = 0;
+        this.stunTimer = 0;
+        this.flashTimer = 0;
+        this.defeatTimer = 0;
+        this.elapsed = 0;
+        this.visualAlpha = 0;
+        this.castBurstTimer = 0;
+        this.castBurst.setVisible(false);
+        this.counted = false;
+        this.castTimer = 0;
+        [this.aura, this.visual, this.readable, this.healthBack, this.healthBar].forEach((object) => object.setVisible(true));
+        this.meleeFlash.setVisible(false);
+        this.redrawGraphics(null);
+        return true;
+    }
+
+    jitter(amount) {
+        return (Math.random() * 2 - 1) * amount;
     }
 
     update(player, delta) {
-        if (!this.sprite || !this.sprite.active || this.isDefeated || !player || !player.sprite || !player.sprite.active) {
+        if (!this.inUse || this.isDefeated || !this.sprite || !this.sprite.active || !player || !player.sprite || !player.sprite.active) {
             return;
         }
-
-        const step = delta / 1000;
-        const body = this.sprite.body;
-        const dx = player.sprite.x - this.sprite.x;
-        const dy = Math.abs(player.sprite.y - this.sprite.y);
-        const distance = Math.abs(dx);
-        const canReach = distance <= this.range && dy < 90;
-
-        this.attackCooldown = Math.max(0, this.attackCooldown - step);
-        this.stunTimer = Math.max(0, this.stunTimer - step);
-        this.flashTimer = Math.max(0, this.flashTimer - step);
-        if (this.flashTimer === 0) {
-            this.sprite.setFillStyle(this.config.color);
+        const seconds = delta / 1000;
+        this.elapsed += seconds;
+        this.flashTimer = Math.max(0, this.flashTimer - seconds);
+        if (this.castBurstTimer > 0) {
+            this.castBurstTimer = Math.max(0, this.castBurstTimer - seconds);
+            this.castBurst.setAlpha(this.castBurstTimer / this.config.cast.burst);
+            if (this.castBurstTimer === 0) {
+                this.castBurst.setVisible(false);
+            }
         }
 
-        if (this.telegraphTimer > 0) {
-            this.telegraphTimer = Math.max(0, this.telegraphTimer - step);
-            body.setVelocityX(0);
-            if (this.telegraphTimer === 0) {
-                this.telegraph.setVisible(false);
-                this.attackCooldown = 1.2;
-                if (canReach) {
-                    player.takeDamage(this.damage);
+        if (this.state === 'materialize') {
+            this.stateTimer = Math.max(0, this.stateTimer - seconds);
+            this.untargetable = true;
+            const progress = 1 - this.stateTimer / TEMPLE_WAVE.materialize;
+            this.visualAlpha = progress;
+            if (this.stateTimer === 0) {
+                this.state = 'chase';
+                this.untargetable = false;
+                this.visualAlpha = 1;
+                if (this.config.cast) {
+                    this.castTimer = this.config.cast.first + this.jitter(this.config.cast.jitter);
                 }
             }
-        } else if (this.stunTimer > 0) {
-            body.setVelocityX(body.velocity.x * 0.92);
-        } else if (distance <= 450) {
-            this.facing = dx < 0 ? -1 : 1;
-            if (canReach && this.attackCooldown <= 0) {
-                body.setVelocityX(0);
-                this.telegraphTimer = 0.4;
-                this.telegraph.setVisible(true);
-            } else if (!canReach) {
-                body.setVelocityX(this.facing * this.speed);
-            } else {
-                body.setVelocityX(0);
-            }
-        } else {
-            const leftLimit = this.spawnX - 120;
-            const rightLimit = this.spawnX + 120;
-            if (this.sprite.x <= leftLimit) {
-                this.patrolDirection = 1;
-            } else if (this.sprite.x >= rightLimit) {
-                this.patrolDirection = -1;
-            }
-            this.facing = this.patrolDirection;
-            body.setVelocityX(this.patrolDirection * this.speed * 0.55);
-        }
-
-        this.updateVisuals();
-    }
-
-    updateVisuals() {
-        if (!this.sprite || !this.sprite.active) {
+            this.redrawGraphics(player);
             return;
         }
 
-        const x = this.sprite.x;
-        const y = this.sprite.y;
+        if (this.stunTimer > 0) {
+            this.stunTimer = Math.max(0, this.stunTimer - seconds);
+            this.sprite.body.setVelocityX(this.sprite.body.velocity.x * 0.92);
+            this.redrawGraphics(player);
+            return;
+        }
+
+        const dx = player.sprite.body.center.x - this.sprite.body.center.x;
+        const dy = Math.abs(player.sprite.body.center.y - this.sprite.body.center.y);
+        const distance = Math.abs(dx);
+        this.facing = dx < 0 ? -1 : 1;
+        this.meleeCooldown = Math.max(0, this.meleeCooldown - seconds);
+
+        if (this.meleeTimer > 0) {
+            this.meleeTimer = Math.max(0, this.meleeTimer - seconds);
+            this.sprite.body.setVelocityX(0);
+            this.meleeFlash.setPosition(this.sprite.x + this.facing * (this.config.melee.range / 2), this.sprite.body.bottom - 8);
+            this.meleeFlash.setAlpha(0.5 + Math.sin(this.elapsed * 28) * 0.35);
+            if (this.meleeTimer === 0) {
+                this.meleeFlash.setVisible(false);
+                if (distance <= this.config.melee.range && dy < this.hitHalfHeight + 38) {
+                    player.takeDamage(this.config.melee.damage, this.sprite.x, this.config.knockback);
+                }
+                this.meleeCooldown = this.config.melee.cooldown;
+                this.state = 'chase';
+            }
+            this.redrawGraphics(player);
+            return;
+        }
+
+        if (this.castTelegraphTimer > 0) {
+            this.castTelegraphTimer = Math.max(0, this.castTelegraphTimer - seconds);
+            this.sprite.body.setVelocityX(0);
+            if (this.castTelegraphTimer === 0) {
+                const stillInRange = distance <= this.config.cast.range * 1.15;
+                if (stillInRange && !player.isShadowed) {
+                    player.applyShadowCurse(SHADOW.duration);
+                    this.castBurst.setPosition(player.sprite.body.center.x, player.sprite.body.center.y);
+                    this.castBurst.setAlpha(1).setVisible(true);
+                    this.castBurstTimer = this.config.cast.burst;
+                }
+                this.castTimer = this.config.cast.interval + this.jitter(this.config.cast.jitter);
+                this.state = 'chase';
+            }
+            this.redrawGraphics(player);
+            return;
+        }
+
+        this.state = 'chase';
+        if (distance <= this.config.melee.range && dy < this.hitHalfHeight + 38 && this.meleeCooldown === 0) {
+            this.meleeTimer = this.config.melee.telegraph;
+            this.state = 'melee-telegraph';
+            this.sprite.body.setVelocityX(0);
+            this.meleeFlash.setVisible(true);
+            this.redrawGraphics(player);
+            return;
+        }
+
+        if (distance > this.config.melee.range) {
+            this.sprite.body.setVelocityX(Math.sign(dx || this.facing) * this.config.speed);
+        } else {
+            this.sprite.body.setVelocityX(0);
+        }
+
+        if (this.config.cast) {
+            this.castTimer -= seconds;
+            if (this.castTimer <= 0 && distance <= this.config.cast.range) {
+                if (player.isShadowed) {
+                    this.castTimer = 1.5;
+                } else {
+                    this.castTelegraphTimer = this.config.cast.telegraph;
+                    this.state = 'cast-telegraph';
+                    this.sprite.body.setVelocityX(0);
+                }
+            }
+        }
+        this.redrawGraphics(player);
+    }
+
+    redrawGraphics(player) {
+        if (!this.inUse || !this.sprite || !this.sprite.active) {
+            return;
+        }
+        const width = this.config.width;
         const height = this.config.height;
-        const eyeX = x + this.facing * 7;
-        this.healthBarBack.setPosition(x, y - height / 2 - 17);
-        this.healthBar.setPosition(x - 24, y - height / 2 - 17);
-        this.healthBar.setSize(46 * (this.health / this.maxHealth), 4);
-        this.eyeTop.setPosition(eyeX, y - 8);
-        this.eyeBottom.setPosition(eyeX, y - 2);
-        this.telegraph.setPosition(x + this.facing * (this.config.width / 2 + 24), y + height / 2 - 8);
+        const bodyColor = this.flashTimer > 0 ? 0xffffff : (this.type === 'imp' ? 0x331735 : 0x8c3b3b);
+        this.aura.clear();
+        this.aura.setPosition(this.sprite.x, this.sprite.y);
+        if (this.type === 'imp') {
+            const pulse = 0.1 + (Math.sin(this.elapsed * 6) + 1) * 0.055;
+            this.aura.fillStyle(0x8739d1, pulse);
+            this.aura.fillEllipse(0, 0, width * 2.2, height * 1.8);
+        }
+
+        this.visual.clear();
+        const bob = this.type === 'imp' ? Math.sin(this.elapsed * this.config.floatSpeed) * this.config.floatBob : 0;
+        const castLift = this.castTelegraphTimer > 0 ? 4 : 0;
+        this.visual.setPosition(this.sprite.x, this.sprite.y + bob - castLift);
+        this.visual.fillStyle(bodyColor, 1);
+        this.visual.fillEllipse(0, 0, width, height);
+        this.visual.lineStyle(this.type === 'brute' ? 3 : 2, this.type === 'brute' ? 0x30151b : 0x170f22, 1);
+        this.visual.strokeEllipse(0, 0, width, height);
+        if (this.type === 'imp') {
+            this.drawHorns(height);
+        } else {
+            this.drawBruteSpikes(width, height);
+        }
+        this.healthBack.setPosition(this.sprite.x, this.sprite.y - height / 2 - 12);
+        this.healthBar.setPosition(this.sprite.x - (width + 12) / 2, this.sprite.y - height / 2 - 12);
+        this.healthBar.setSize((width + 12) * (this.health / this.maxHealth), 4);
+
+        this.readable.clear();
+        this.readable.setPosition(this.sprite.x, this.sprite.y + bob - castLift);
+        this.readable.fillStyle(this.type === 'imp' ? 0xffc45e : 0xff633f, 1);
+        this.readable.fillEllipse(-7, -4, 6, 4);
+        this.readable.fillEllipse(7, -4, 6, 4);
+        if (this.castTelegraphTimer > 0 && player && player.sprite && player.sprite.active) {
+            const progress = 1 - this.castTelegraphTimer / this.config.cast.telegraph;
+            const radius = 9 + progress * 27;
+            this.readable.lineStyle(2, 0xb56bff, 0.95);
+            this.readable.beginPath();
+            this.readable.arc(0, -height / 2 - 14, radius, 0, Math.PI * 2);
+            this.readable.strokePath();
+            this.readable.lineStyle(1, 0x21112d, 0.8);
+            this.readable.beginPath();
+            this.readable.moveTo(0, -height / 2 - 14);
+            this.readable.lineTo(player.sprite.x - this.sprite.x, player.sprite.y - this.sprite.y);
+            this.readable.strokePath();
+        }
+        this.visual.setAlpha(this.visualAlpha ?? 1);
+        this.readable.setAlpha(this.visualAlpha ?? 1);
+        this.aura.setAlpha(this.visualAlpha ?? 1);
+    }
+
+    drawHorns(height) {
+        for (let index = 0; index < this.leftHornPoints.length; index += 1) {
+            const progress = index / (this.leftHornPoints.length - 1);
+            this.leftHornPoints[index].set(-5 - progress * 14, -height / 2 + 4 - Math.sin(progress * Math.PI) * 12 - progress * 4);
+            this.rightHornPoints[index].set(5 + progress * 14, -height / 2 + 4 - Math.sin(progress * Math.PI) * 12 - progress * 4);
+        }
+        this.visual.lineStyle(4, 0x171020, 1);
+        this.visual.strokePoints(this.leftHornPoints, false, false);
+        this.visual.strokePoints(this.rightHornPoints, false, false);
+    }
+
+    drawBruteSpikes(width, height) {
+        this.leftSpikePoints[0].set(-width / 2 + 4, -height / 4);
+        this.leftSpikePoints[1].set(-width / 2 - 14, -height / 2 + 4);
+        this.leftSpikePoints[2].set(-width / 2 + 12, -height / 2 + 14);
+        this.rightSpikePoints[0].set(width / 2 - 4, -height / 4);
+        this.rightSpikePoints[1].set(width / 2 + 14, -height / 2 + 4);
+        this.rightSpikePoints[2].set(width / 2 - 12, -height / 2 + 14);
+        this.visual.fillStyle(0x501f2a, 1);
+        this.visual.fillPoints(this.leftSpikePoints, true, false);
+        this.visual.fillPoints(this.rightSpikePoints, true, false);
     }
 
     applyDamage(amount, fromX) {
-        if (!this.sprite || !this.sprite.active || this.isDefeated) {
+        if (!this.sprite || !this.sprite.active || this.isDefeated || this.untargetable) {
             return;
         }
-
         this.health = Math.max(0, this.health - amount);
-        this.flashTimer = 0.09;
-        this.stunTimer = 0.2;
-        this.telegraphTimer = 0;
-        this.telegraph.setVisible(false);
-        this.sprite.setFillStyle(0xffffff);
-        this.sprite.body.setVelocityX(this.sprite.x >= fromX ? 220 : -220);
-        this.updateVisuals();
-
+        this.flashTimer = this.config.flash;
+        this.stunTimer = this.config.stun;
+        this.sprite.body.setVelocityX(this.sprite.x >= fromX ? this.config.knockback : -this.config.knockback);
+        if (this.castTelegraphTimer > 0) {
+            this.castTelegraphTimer = 0;
+            this.castTimer = 3;
+            this.state = 'chase';
+        }
         if (this.health <= 0) {
             this.defeat();
         }
-    }
-
-    dropHealthOrb() {
-        if (!this.healthOrb || !this.healthOrb.active) {
-            return;
-        }
-        if (Math.random() > this.config.dropChance) {
-            return;
-        }
-
-        this.healthOrb.setPosition(this.sprite.x, this.sprite.y - this.config.height / 2);
-        this.healthOrb.setVisible(true);
-        this.healthOrb.body.enable = true;
-        this.orbTween.restart();
     }
 
     defeat() {
         if (!this.sprite || !this.sprite.active || this.isDefeated) {
             return;
         }
-
         this.isDefeated = true;
+        this.untargetable = true;
+        this.state = 'defeated';
+        this.defeatTimer = 0.25;
         this.sprite.body.enable = false;
-        this.healthBarBack.setVisible(false);
+        this.meleeFlash.setVisible(false);
+        this.castBurst.setVisible(false);
+        this.healthBack.setVisible(false);
         this.healthBar.setVisible(false);
-        this.eyeTop.setVisible(false);
-        this.eyeBottom.setVisible(false);
-        this.telegraph.setVisible(false);
-        this.dropHealthOrb();
-        this.defeatTween.restart();
+        this.scene.onEnemyDefeated(this);
     }
 
-    destroyVisuals() {
-        [this.healthBarBack, this.healthBar, this.eyeTop, this.eyeBottom, this.telegraph]
-            .forEach((object) => {
-                if (object && object.active) {
-                    object.destroy();
-                }
-            });
+    updateDefeat(delta) {
+        if (!this.isDefeated || !this.inUse || !this.visual || !this.visual.active) {
+            return true;
+        }
+        this.defeatTimer = Math.max(0, this.defeatTimer - delta / 1000);
+        const alpha = this.defeatTimer / 0.25;
+        this.visual.setAlpha(alpha);
+        this.readable.setAlpha(alpha);
+        this.aura.setAlpha(alpha);
+        if (this.defeatTimer === 0) {
+            this.inUse = false;
+            this.state = 'inactive';
+            [this.visual, this.readable, this.aura].forEach((object) => object.setVisible(false));
+            return true;
+        }
+        return false;
     }
 }

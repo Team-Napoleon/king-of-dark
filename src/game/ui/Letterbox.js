@@ -28,7 +28,12 @@ export default class Letterbox {
                 }
             },
         });
-        scene.events.once('shutdown', () => this.destroy());
+        scene.events.once('shutdown', () => {
+            if (!this.top || !this.top.active) {
+                return;
+            }
+            this.destroy();
+        });
     }
 
     playIn(onComplete) {

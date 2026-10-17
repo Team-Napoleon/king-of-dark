@@ -5,6 +5,7 @@ import Player from '../entities/Player';
 import DialogueBox from '../ui/DialogueBox';
 import Letterbox from '../ui/Letterbox';
 import PlayerHud from '../ui/PlayerHud';
+import { DEBUG_KEYS, HERO_PUNCH, KING_ATTACKS } from '../config/animationData';
 
 export default class ArenaScene extends Scene {
     constructor() {
@@ -37,40 +38,27 @@ export default class ArenaScene extends Scene {
             fogAlpha: 0.14,
         });
         this.darknessEnabled = true;
-        this.darknessKey = this.input.keyboard.addKey('L');
+        this.darknessKey = this.input.keyboard.addKey('F2');
         this.physics.add.collider(this.player.sprite, this.floor);
         this.enemies = [];
         this.hud = new PlayerHud(this, this.player, { showControls: false });
         this.physics.add.collider(this.player.sprite, this.leftWall);
         this.physics.add.collider(this.player.sprite, this.rightWall);
 
-        this.boss = new KingOfDark(this, 645, 340);
+        this.boss = new KingOfDark(this);
         this.enemies.push(this.boss);
+        this.debugGraphics = this.add.graphics().setDepth(200).setVisible(false);
+        this.debugEnabled = false;
+        if (DEBUG_KEYS) {
+            this.input.keyboard.addCapture('F3,F7,F8');
+            this.debugKeys = this.input.keyboard.addKeys({
+                toggle: 'F3',
+                bossPhaseOne: 'F7',
+                bossPhaseTwo: 'F8',
+            });
+        }
+        this.physics.add.collider(this.boss.sprite, this.floor);
         this.physics.add.collider(this.player.sprite, this.boss.sprite);
-        this.boss.waveProjectiles.forEach((wave) => {
-            this.physics.add.overlap(this.player.sprite, wave, () => {
-                if (!wave || !wave.active || !wave.body.enable || !this.player || !this.player.sprite.active) {
-                    return;
-                }
-                this.boss.deactivateHazard(wave);
-                this.player.takeDamage(18);
-            });
-        });
-        this.boss.voidOrbs.forEach((orb) => {
-            this.physics.add.overlap(this.player.sprite, orb, () => {
-                if (!orb || !orb.active || !orb.body.enable || !this.player || !this.player.sprite.active) {
-                    return;
-                }
-                this.boss.deactivateHazard(orb);
-                this.player.takeDamage(15);
-            });
-            this.physics.add.collider(orb, this.floor, () => {
-                if (!orb || !orb.active || !orb.body.enable) {
-                    return;
-                }
-                this.boss.deactivateHazard(orb);
-            });
-        });
 
         this.createBossHud();
         this.gameOverShown = false;
@@ -91,7 +79,12 @@ export default class ArenaScene extends Scene {
             align: 'center',
         }).setOrigin(0.5).setScrollFactor(0).setDepth(130).setVisible(false);
         this.bossDefeatedSequence = false;
-        this.events.once('boss-defeated', () => this.handleBossDefeated());
+        this.events.once('boss-defeated', () => {
+            if (!this.victoryText || !this.victoryText.active) {
+                return;
+            }
+            this.handleBossDefeated();
+        });
         this.dialogueBox = new DialogueBox(this);
         this.letterbox = new Letterbox(this);
         this.enterKey = this.input.keyboard.addKey('ENTER');
@@ -124,7 +117,7 @@ export default class ArenaScene extends Scene {
                 if (!this.sys.isActive() || !this.introActive) {
                     return;
                 }
-                this.boss.beginIntroStep(980, () => this.finishIntroStep());
+                this.finishIntroStep();
             },
         });
         if (this.registry.get('bossIntroSeen')) {
@@ -134,8 +127,8 @@ export default class ArenaScene extends Scene {
             this.startIntro();
         }
 
-        this.input.keyboard.once('keydown-R', () => {
-            if (!this.sys.isActive()) {
+        this.input.keyboard.on('keydown-R', () => {
+            if (!this.gameOverText || !this.gameOverText.active || !this.sys.isActive()) {
                 return;
             }
             this.scene.restart();
@@ -190,7 +183,7 @@ export default class ArenaScene extends Scene {
         this.introActive = true;
         this.player.controlsLocked = true;
         this.player.sprite.body.setVelocity(0, 0);
-        this.player.playAnimation('hero-idle');
+        this.player.poseVisual(0);
         this.cameras.main.setZoom(1);
         this.letterbox.playIn(() => {
             if (!this.sys.isActive() || !this.introActive) {
@@ -217,7 +210,7 @@ export default class ArenaScene extends Scene {
             return;
         }
         this.registry.set('bossIntroSeen', true);
-        this.boss.startFight(980);
+        this.boss.beginCombat();
         this.player.controlsLocked = false;
         this.setBossHudVisible(true);
         this.introActive = false;
@@ -248,12 +241,27 @@ export default class ArenaScene extends Scene {
                 this.finishIntroDialogue();
             }
         }
-        if (Input.Keyboard.JustDown(this.darknessKey)) {
-            this.darknessEnabled = !this.darknessEnabled;
-            this.darkness.setDarkness(this.darknessEnabled ? 0.8 : 0, 1.4, 250);
+        if (DEBUG_KEYS) {
+            if (Input.Keyboard.JustDown(this.darknessKey)) {
+                this.darknessEnabled = !this.darknessEnabled;
+                this.darkness.setDarkness(this.darknessEnabled ? 0.8 : 0, 1.4, 250);
+            }
+            if (Input.Keyboard.JustDown(this.debugKeys.toggle)) {
+                this.debugEnabled = !this.debugEnabled;
+                this.debugGraphics.setVisible(this.debugEnabled);
+            }
+            if (Input.Keyboard.JustDown(this.debugKeys.bossPhaseOne)) {
+                this.boss.health = 101;
+            }
+            if (Input.Keyboard.JustDown(this.debugKeys.bossPhaseTwo)) {
+                this.boss.health = 1;
+            }
         }
         this.player.update(delta);
         this.boss.update(this.player, delta);
+        if (this.debugEnabled) {
+            this.drawDebug();
+        }
         this.hud.update();
         if (this.bossHealthBar && this.bossHealthBar.active) {
             this.bossHealthBar.setSize(584 * (this.boss.health / this.boss.maxHealth), 12);
@@ -270,5 +278,46 @@ export default class ArenaScene extends Scene {
         this.gameOverShown = true;
         this.cameras.main.stopFollow();
         this.gameOverText.setVisible(true);
+    }
+
+    drawDebugRect(x, y, width, height, color) {
+        const graphics = this.debugGraphics;
+        graphics.lineStyle(2, color, 1);
+        graphics.beginPath();
+        graphics.moveTo(x, y);
+        graphics.lineTo(x + width, y);
+        graphics.lineTo(x + width, y + height);
+        graphics.lineTo(x, y + height);
+        graphics.lineTo(x, y);
+        graphics.strokePath();
+    }
+
+    drawDebug() {
+        const graphics = this.debugGraphics;
+        graphics.clear();
+        const playerBody = this.player.sprite.body;
+        this.drawDebugRect(playerBody.x, playerBody.y, playerBody.width, playerBody.height, 0x36ff70);
+        if (this.player.hitBoxActive) {
+            const hitX = this.player.hitBoxDir > 0 ? this.player.sprite.x - 10 : this.player.sprite.x - HERO_PUNCH.reach;
+            this.drawDebugRect(hitX, this.player.hitBoxY - HERO_PUNCH.vertical, HERO_PUNCH.reach, HERO_PUNCH.vertical * 2, 0xffe336);
+        }
+        this.drawDebugRect(
+            this.boss.sprite.x - this.boss.hitHalfWidth,
+            this.boss.sprite.body.center.y - this.boss.hitHalfHeight,
+            this.boss.hitHalfWidth * 2,
+            this.boss.hitHalfHeight * 2,
+            0xff3030,
+        );
+        graphics.fillStyle(0xffffff, 1);
+        graphics.fillEllipse(playerBody.center.x, playerBody.bottom, 4, 4);
+        graphics.fillEllipse(this.boss.sprite.body.center.x, this.boss.sprite.body.bottom, 4, 4);
+        if (this.boss.currentAttackName && this.boss.currentAttack) {
+            const attack = KING_ATTACKS[this.boss.currentAttackName];
+            const radius = attack.radius || attack.hitRange;
+            graphics.lineStyle(2, 0xb36cff, 1);
+            graphics.beginPath();
+            graphics.arc(this.boss.sprite.x, this.boss.sprite.body.center.y, radius, 0, Math.PI * 2);
+            graphics.strokePath();
+        }
     }
 }

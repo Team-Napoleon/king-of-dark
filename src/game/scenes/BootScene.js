@@ -1,4 +1,5 @@
 import { Scene } from 'phaser';
+import { preloadSheets } from '../config/animationData';
 
 export default class BootScene extends Scene {
     constructor() {
@@ -38,18 +39,7 @@ export default class BootScene extends Scene {
             }
         });
 
-        this.load.spritesheet('hero-walk', 'assets/Hero/Idle_v3_walking_south_spritesheet.png', {
-            frameWidth: 168,
-            frameHeight: 168,
-        });
-        this.load.spritesheet('hero-run', 'assets/Hero/Idle_v3_running_south_spritesheet.png', {
-            frameWidth: 168,
-            frameHeight: 168,
-        });
-        this.load.spritesheet('hero-jump', 'assets/Hero/Idle_running-jump_south_spritesheet.png', {
-            frameWidth: 176,
-            frameHeight: 176,
-        });
+        preloadSheets(this);
         this.load.image('bg-menu', 'assets/backgrounds/menu.jpg');
         this.load.image('bg-temple', 'assets/backgrounds/temple.jpg');
         this.load.image('bg-arena', 'assets/backgrounds/arena.jpg');

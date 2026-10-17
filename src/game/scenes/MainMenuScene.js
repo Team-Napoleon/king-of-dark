@@ -46,7 +46,7 @@ export default class MainMenuScene extends Scene {
         button.add([buttonBg, buttonText]);
 
         const handlePlay = () => {
-            if (this.isStarting) {
+            if (!buttonBg || !buttonBg.active || !this.sys.isActive() || this.isStarting) {
                 return;
             }
 
@@ -64,10 +64,16 @@ export default class MainMenuScene extends Scene {
         };
 
         buttonBg.on('pointerover', () => {
+            if (!buttonBg || !buttonBg.active) {
+                return;
+            }
             buttonBg.setFillStyle(0x4a2a3d);
         });
 
         buttonBg.on('pointerout', () => {
+            if (!buttonBg || !buttonBg.active) {
+                return;
+            }
             buttonBg.setFillStyle(0x3a2135);
         });
 

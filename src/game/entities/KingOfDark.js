@@ -1,178 +1,145 @@
-export default class KingOfDark {
-    constructor(scene, x = 645, y = 340) {
-        this.scene = scene;
-        this.maxHealth = 200;
-        this.health = this.maxHealth;
-        this.hitHalfWidth = 45;
-        this.hitHalfHeight = 65;
-        this.floorTop = 630;
-        this.baseColor = 0x1b1030;
-        this.isDefeated = false;
-        this.vulnerable = false;
-        this.combatStarted = false;
-        this.phaseTwo = false;
-        this.state = 'idle';
-        this.stateTimer = 0.8;
-        this.currentAttack = null;
-        this.lastAttack = null;
-        this.shadowStepCooldown = 0;
-        this.voidRainCooldown = 0;
-        this.hitFlashTimer = 0;
-        this.eyeFlashTimer = 0;
-        this.introStepStage = null;
-        this.introStepTimer = 0;
-        this.introStepTargetX = 980;
-        this.introStepCallback = null;
-        this.slashTimer = 0;
-        this.voidRainX = [];
+import { Math as PhaserMath, TintModes } from 'phaser';
+import { frameAt, KING, KING_ATTACKS, SHEETS, showFrame } from '../config/animationData';
 
-        this.createVisuals(x, y);
-        this.auraTween = scene.tweens.add({
-            targets: this.aura,
-            alpha: 0.28,
-            scaleX: 1.12,
-            scaleY: 1.12,
-            duration: 700,
-            yoyo: true,
-            repeat: -1,
-        });
+export default class KingOfDark {
+    constructor(scene, x = KING.throneX, y = KING.throneY) {
+        this.scene = scene;
+        this.maxHealth = KING.hp;
+        this.health = this.maxHealth;
+        this.hitHalfWidth = KING.hitHalfWidth;
+        this.hitHalfHeight = KING.hitHalfHeight;
+        this.isDefeated = false;
+        this.untargetable = true;
+        this.visualHidden = false;
+        this.vulnerable = false;
+        this.phaseTwo = false;
+        this.combatStarted = false;
+        this.state = 'throne';
+        this.stateTimer = 0;
+        this.approachTimer = 0;
+        this.pendingAttack = null;
+        this.currentAttackName = null;
+        this.currentAttack = null;
+        this.attackElapsed = 0;
+        this.attackFrame = 0;
+        this.attackDir = 1;
+        this.attackLandX = 0;
+        this.attackTeleported = false;
+        this.visualHidden = false;
+        this.hitLanded = false;
+        this.lastAttack = null;
+        this.swordCooldown = 0;
+        this.flashTimer = 0;
+        this.eyeFlashTimer = 0;
+        this.elapsed = 0;
+        this.deathStage = null;
+        this.deathTimer = 0;
+
+        this.sprite = scene.add.rectangle(x, y, KING.body.width, KING.body.height, 0x000000, 0).setVisible(false);
+        scene.physics.add.existing(this.sprite);
+        this.sprite.body.setSize(KING.body.width, KING.body.height);
+        this.sprite.body.setAllowGravity(false);
+        this.sprite.body.setImmovable(true);
+        this.sprite.body.setCollideWorldBounds(true);
+
+        this.visual = scene.add.sprite(x, y + KING.body.height / 2, 'king-idle', 0).setDepth(6);
+        this.aura = scene.add.ellipse(x, y, 130, 170, 0x6126a8, 0.2).setDepth(4);
+        this.eyeLeft = scene.add.ellipse(x - 15, y + 20, 12, 6, 0xa76bff, 0.9).setDepth(52);
+        this.eyeRight = scene.add.ellipse(x + 15, y + 20, 12, 6, 0xa76bff, 0.9).setDepth(52);
+        this.attackMarker = scene.add.graphics().setDepth(52).setVisible(false);
+        this.deathCircle = scene.add.circle(x, y, 1, 0x000000, 1)
+            .setDepth(120)
+            .setVisible(false)
+            .setScale(0);
         this.deathTween = scene.tweens.add({
             targets: this.deathCircle,
             scaleX: 1400,
             scaleY: 1400,
-            duration: 2000,
+            duration: KING.deathExpand * 1000,
             paused: true,
             persist: true,
             onComplete: () => {
-                if (!this.scene || !this.scene.sys.isActive() || !this.deathCircle || !this.deathCircle.active) {
+                if (!this.deathCircle || !this.deathCircle.active || !this.scene || !this.scene.sys.isActive()) {
                     return;
                 }
                 this.scene.events.emit('boss-defeated', this);
             },
         });
-        this.scene.events.once('shutdown', () => this.destroyEffects());
+
+        scene.events.once('shutdown', () => {
+            if (!this.deathCircle || !this.deathCircle.active) {
+                return;
+            }
+            if (this.deathTween) {
+                this.deathTween.stop();
+            }
+            if (this.deathStage === 'freeze' && this.scene && this.scene.physics) {
+                this.scene.physics.world.resume();
+            }
+        });
+        this.poseVisual(0);
     }
 
-    createVisuals(x, y) {
-        this.aura = this.scene.add.ellipse(x, y + 12, 150, 176, 0x5422a8, 0.16).setDepth(4);
-        this.sprite = this.scene.add.rectangle(x, y, 90, 130, this.baseColor)
-            .setStrokeStyle(3, 0x7a3cff)
-            .setDepth(5);
-        this.scene.physics.add.existing(this.sprite);
+    get x() {
+        return this.sprite.x;
+    }
+
+    get y() {
+        return this.sprite.y;
+    }
+
+    beginCombat() {
+        if (!this.sprite || !this.sprite.active || this.isDefeated) {
+            return;
+        }
+        this.combatStarted = true;
         this.sprite.body.setAllowGravity(false);
         this.sprite.body.setImmovable(true);
-        this.sprite.body.setCollideWorldBounds(true);
-        this.sprite.body.setSize(90, 130);
-
-        this.eyeLeft = this.scene.add.rectangle(x - 15, y - 18, 10, 5, 0xc18bff).setDepth(52);
-        this.eyeRight = this.scene.add.rectangle(x + 15, y - 18, 10, 5, 0xc18bff).setDepth(52);
-        this.telegraph = this.scene.add.rectangle(x, y - 84, 150, 8, 0xff3737, 0.9)
-            .setDepth(52)
-            .setVisible(false);
-        this.stepMarker = this.scene.add.rectangle(0, this.floorTop - 4, 46, 6, 0x9b55ff, 0.95)
-            .setDepth(52)
-            .setVisible(false);
-        this.slashVisual = this.scene.add.graphics().setDepth(52).setVisible(false);
-        this.deathCircle = this.scene.add.circle(x, y, 1, 0x000000, 1)
-            .setDepth(120)
-            .setVisible(false)
-            .setScale(0);
-
-        this.waveProjectiles = [];
-        for (let index = 0; index < 3; index += 1) {
-            const wave = this.scene.add.rectangle(0, 0, 40, 30, 0x5c36d6, 0.95)
-                .setStrokeStyle(2, 0xb28bff)
-                .setDepth(52)
-                .setVisible(false);
-            this.scene.physics.add.existing(wave);
-            wave.body.setAllowGravity(false);
-            wave.body.setImmovable(true);
-            wave.body.setCollideWorldBounds(true);
-            wave.body.enable = false;
-            wave.life = 0;
-            this.waveProjectiles.push(wave);
-        }
-
-        this.voidMarkers = [];
-        this.voidOrbs = [];
-        for (let index = 0; index < 5; index += 1) {
-            this.voidMarkers.push(
-                this.scene.add.rectangle(0, this.floorTop - 3, 42, 6, 0xff3030, 0.95)
-                    .setDepth(52)
-                    .setVisible(false),
-            );
-            const orb = this.scene.add.circle(0, -40, 14, 0x2b0710, 1)
-                .setStrokeStyle(3, 0xff3030)
-                .setDepth(52)
-                .setVisible(false);
-            this.scene.physics.add.existing(orb);
-            orb.body.setAllowGravity(false);
-            orb.body.setImmovable(false);
-            orb.body.setCollideWorldBounds(false);
-            orb.body.enable = false;
-            orb.life = 0;
-            this.voidOrbs.push(orb);
-        }
+        this.untargetable = false;
+        this.startAttack('sword');
     }
 
     startFight(fightX = 980) {
         if (!this.sprite || !this.sprite.active || this.isDefeated) {
             return;
         }
-        this.sprite.setPosition(fightX, this.floorTop - 65);
-        this.sprite.body.reset(fightX, this.floorTop - 65);
-        this.aura.setPosition(fightX, this.floorTop - 53);
+        const centerY = KING.floorY - KING.body.height / 2;
+        this.sprite.body.reset(fightX, centerY);
+        this.sprite.body.setAllowGravity(true);
+        this.sprite.body.setImmovable(false);
         this.combatStarted = true;
+        this.untargetable = false;
         this.state = 'idle';
-        this.stateTimer = 0.8;
+        this.stateTimer = KING.idleTime;
+        this.vulnerable = true;
+        this.startAttack('sword');
+    }
+
+    startAttack(name) {
+        const attack = KING_ATTACKS[name];
+        if (!attack || !this.sprite || !this.sprite.active) {
+            return;
+        }
+        this.currentAttackName = name;
+        this.currentAttack = attack;
+        this.lastAttack = name;
+        this.attackElapsed = 0;
+        this.attackFrame = 0;
+        this.hitLanded = false;
+        this.attackTeleported = false;
+        this.untargetable = false;
         this.vulnerable = false;
-        this.updateVisuals();
-    }
-
-    flashEyes() {
-        if (!this.eyeLeft || !this.eyeLeft.active || !this.eyeRight || !this.eyeRight.active) {
-            return;
-        }
-        this.eyeFlashTimer = 0.3;
-        this.eyeLeft.setFillStyle(0xf4e9ff);
-        this.eyeRight.setFillStyle(0xf4e9ff);
-    }
-
-    beginIntroStep(fightX, onComplete) {
-        if (!this.sprite || !this.sprite.active || this.isDefeated) {
-            return;
-        }
-        this.introStepTargetX = Math.max(120, Math.min(1160, fightX));
-        this.stepMarker.setPosition(this.introStepTargetX, this.floorTop - 4);
-        this.stepMarker.setVisible(true);
-        this.sprite.setAlpha(1);
-        this.introStepStage = 'fade';
-        this.introStepTimer = 0.3;
-        this.introStepCallback = typeof onComplete === 'function' ? onComplete : null;
-    }
-
-    updateIntroStep(step) {
-        this.introStepTimer = Math.max(0, this.introStepTimer - step);
-        if (this.introStepStage === 'fade') {
-            this.sprite.setAlpha(Math.max(0, this.introStepTimer / 0.3));
-            if (this.introStepTimer === 0) {
-                this.sprite.setAlpha(0);
-                this.introStepStage = 'marker';
-                this.introStepTimer = 0.7;
-            }
-            return;
-        }
-        if (this.introStepStage === 'marker' && this.introStepTimer === 0) {
-            this.stepMarker.setVisible(false);
-            this.sprite.setPosition(this.introStepTargetX, this.floorTop - 65);
-            this.sprite.body.reset(this.introStepTargetX, this.floorTop - 65);
-            this.sprite.setAlpha(1);
-            this.introStepStage = null;
-            const callback = this.introStepCallback;
-            this.introStepCallback = null;
-            if (callback && this.scene && this.scene.sys.isActive()) {
-                callback();
-            }
+        this.state = 'attack';
+        this.sprite.body.setVelocityX(0);
+        if (name === 'sword') {
+            const player = this.scene.player;
+            const heroX = player && player.sprite && player.sprite.active ? player.sprite.x : this.sprite.x;
+            const heroFacing = player ? player.facing : 1;
+            this.attackLandX = PhaserMath.Clamp(heroX - heroFacing * attack.landDistance, KING.arenaMinX, KING.arenaMaxX);
+            this.attackDir = Math.sign(heroX - this.attackLandX) || 1;
+            this.swordCooldown = attack.cooldown;
+        } else {
+            this.attackDir = this.facing;
         }
     }
 
@@ -180,255 +147,253 @@ export default class KingOfDark {
         if (!this.sprite || !this.sprite.active) {
             return;
         }
-
-        const step = delta / 1000;
+        const seconds = delta / 1000;
+        this.elapsed += seconds;
         if (this.deathStage) {
-            this.updateDeath(step);
+            this.updateDeath(seconds);
             return;
         }
         if (this.isDefeated) {
             return;
         }
-        this.updateProjectiles(step);
-        this.shadowStepCooldown = Math.max(0, this.shadowStepCooldown - step);
-        this.voidRainCooldown = Math.max(0, this.voidRainCooldown - step);
-        this.hitFlashTimer = Math.max(0, this.hitFlashTimer - step);
-        this.eyeFlashTimer = Math.max(0, this.eyeFlashTimer - step);
+        this.swordCooldown = Math.max(0, this.swordCooldown - seconds);
+        this.flashTimer = Math.max(0, this.flashTimer - seconds);
+        this.eyeFlashTimer = Math.max(0, this.eyeFlashTimer - seconds);
         if (this.eyeFlashTimer === 0) {
-            this.eyeLeft.setFillStyle(0xc18bff);
-            this.eyeRight.setFillStyle(0xc18bff);
+            this.eyeLeft.setFillStyle(0xa76bff, 0.9);
+            this.eyeRight.setFillStyle(0xa76bff, 0.9);
         }
-        this.slashTimer = Math.max(0, this.slashTimer - step);
-        if (this.slashTimer === 0) {
-            this.slashVisual.setVisible(false);
-        }
-        if (this.hitFlashTimer === 0 && this.state !== 'windup') {
-            this.sprite.setFillStyle(this.baseColor);
-        }
-        if (this.introStepStage) {
-            this.updateIntroStep(step);
-            this.updateVisuals();
-            return;
+
+        if (player && player.sprite && player.sprite.active) {
+            this.facing = player.sprite.x < this.sprite.x ? -1 : 1;
         }
         if (!this.combatStarted || !player || !player.sprite || !player.sprite.active) {
-            this.updateVisuals();
+            this.vulnerable = false;
+            this.poseVisual(seconds);
             return;
         }
 
-        if (!this.phaseTwo && this.health <= 100) {
+        if (!this.phaseTwo && this.health <= KING.phase2At) {
             this.phaseTwo = true;
-            this.baseColor = 0x100821;
-            this.sprite.setFillStyle(this.baseColor);
             this.scene.cameras.main.shake(400, 0.01);
             if (this.scene.darkness) {
                 this.scene.darkness.setDarkness(1, 1.2, 500);
             }
         }
 
-        this.stateTimer = Math.max(0, this.stateTimer - step);
-        if (this.state === 'idle' && this.stateTimer === 0) {
-            this.chooseAttack();
-        } else if (this.state === 'windup' && this.stateTimer === 0) {
-            this.telegraph.setVisible(false);
-            this.executeAttack(player);
-        } else if (this.state === 'recover' && this.stateTimer === 0) {
-            this.vulnerable = false;
+        if (this.currentAttack) {
+            this.updateAttack(player, seconds);
+        } else if (this.state === 'approach') {
+            this.updateApproach(player, seconds);
+        } else {
+            this.sprite.body.setVelocityX(0);
             this.state = 'idle';
-            this.stateTimer = 0.8;
-        } else if (this.state === 'step-fade' && this.stateTimer === 0) {
-            this.sprite.setAlpha(0);
-            this.state = 'step-marker';
-            this.stateTimer = 0.7;
-        } else if (this.state === 'step-marker' && this.stateTimer === 0) {
-            this.completeShadowStep(player);
-        } else if (this.state === 'void-rain' && this.stateTimer === 0) {
-            this.launchVoidOrbs();
-            this.beginRecovery(this.phaseTwo ? 0.9 : 1.2);
+            this.vulnerable = true;
+            this.stateTimer = Math.max(0, this.stateTimer - seconds);
+            if (this.stateTimer === 0) {
+                this.chooseNextAttack(player);
+            }
         }
-
-        if (this.state === 'step-fade') {
-            this.sprite.setAlpha(Math.max(0, this.stateTimer / 0.3));
-        }
-        this.facePlayer(player);
-        this.updateVisuals();
+        this.poseVisual(seconds);
     }
 
-    chooseAttack() {
-        const options = ['dark-slash', 'shadow-wave'];
-        if (this.shadowStepCooldown <= 0) {
-            options.push('shadow-step');
+    chooseNextAttack(player) {
+        const distance = Math.abs(player.sprite.x - this.sprite.x);
+        const candidates = [];
+        if (this.swordCooldown <= 0) {
+            candidates.push({ name: 'sword', weight: distance > 180 ? 3 : 2 });
         }
-        if (this.phaseTwo && this.voidRainCooldown <= 0) {
-            options.push('void-rain');
+        if (distance <= 200) {
+            candidates.push({ name: 'tendril', weight: 3 });
         }
-        const choices = options.filter((attack) => attack !== this.lastAttack);
-        const pool = choices.length > 0 ? choices : options;
-        this.currentAttack = pool[Math.floor(Math.random() * pool.length)];
-        this.lastAttack = this.currentAttack;
-        this.state = 'windup';
-        this.stateTimer = 0.6 * (this.phaseTwo ? 0.7 : 1);
-        this.vulnerable = false;
-        this.sprite.setFillStyle(0x8c1d36);
-        this.telegraph.setVisible(true);
+        candidates.push({ name: 'void', weight: (distance <= 260 ? 2 : 1) * (this.phaseTwo ? 1.5 : 1) });
+
+        let choices = candidates.filter((candidate) => candidate.name !== this.lastAttack);
+        if (choices.length === 0) {
+            choices = candidates;
+        }
+        const totalWeight = choices.reduce((sum, candidate) => sum + candidate.weight, 0);
+        let roll = Math.random() * totalWeight;
+        let selected = choices[0];
+        for (let index = 0; index < choices.length; index += 1) {
+            roll -= choices[index].weight;
+            if (roll <= 0) {
+                selected = choices[index];
+                break;
+            }
+        }
+
+        if (distance > 420 && selected.name !== 'sword') {
+            this.pendingAttack = selected.name;
+            this.approachTimer = 0;
+            this.state = 'approach';
+            this.vulnerable = false;
+            return;
+        }
+        this.startAttack(selected.name);
     }
 
-    executeAttack(player) {
-        if (this.currentAttack === 'dark-slash') {
-            this.darkSlash(player);
-            this.beginRecovery(this.phaseTwo ? 0.9 : 1.2);
-        } else if (this.currentAttack === 'shadow-wave') {
-            this.spawnWave(player);
-            this.beginRecovery(this.phaseTwo ? 0.9 : 1.2);
-        } else if (this.currentAttack === 'shadow-step') {
-            this.beginShadowStep(player);
-        } else if (this.currentAttack === 'void-rain') {
-            this.beginVoidRain(player);
-        }
-    }
-
-    darkSlash(player) {
-        const facing = player.sprite.x < this.sprite.x ? -1 : 1;
-        this.facing = facing;
-        this.slashVisual.clear();
-        this.slashVisual.setPosition(this.sprite.x + facing * 58, this.sprite.y);
-        this.slashVisual.lineStyle(8, 0xd8b5ff, 0.95);
-        this.slashVisual.beginPath();
-        this.slashVisual.arc(0, 0, 65, facing > 0 ? -Math.PI / 2 : Math.PI / 2, facing > 0 ? Math.PI / 2 : Math.PI * 1.5, false);
-        this.slashVisual.strokePath();
-        this.slashVisual.setVisible(true);
-        this.slashTimer = 0.28;
-
+    updateApproach(player, seconds) {
         const dx = player.sprite.x - this.sprite.x;
-        if (Math.abs(dx) <= 130 && Math.abs(player.sprite.y - this.sprite.y) <= 110 && Math.sign(dx) === facing) {
-            player.takeDamage(20);
-        }
-    }
-
-    spawnWave(player) {
-        const wave = this.waveProjectiles.find((projectile) => !projectile.body.enable);
-        if (!wave) {
+        const distance = Math.abs(dx);
+        this.facing = dx < 0 ? -1 : 1;
+        this.approachTimer += seconds;
+        const speed = distance > KING.runBeyond ? KING.runSpeed : KING.walkSpeed;
+        if (distance <= KING.approachUntil || this.approachTimer >= 3) {
+            this.sprite.body.setVelocityX(0);
+            const pending = this.pendingAttack || 'void';
+            this.pendingAttack = null;
+            this.startAttack(pending);
             return;
         }
-        const facing = player.sprite.x < this.sprite.x ? -1 : 1;
-        this.facing = facing;
-        wave.setPosition(this.sprite.x + facing * 62, this.floorTop - 15);
-        wave.setVisible(true);
-        wave.body.enable = true;
-        wave.life = 3;
-        wave.body.setVelocity(facing * 380, 0);
-    }
-
-    beginShadowStep(player) {
-        this.shadowStepCooldown = 6;
-        const facing = player.facing || 1;
-        this.shadowStepX = Math.max(120, Math.min(1160, player.sprite.x - facing * 110));
-        this.stepMarker.setPosition(this.shadowStepX, this.floorTop - 4);
-        this.stepMarker.setVisible(true);
-        this.sprite.setAlpha(1);
-        this.state = 'step-fade';
-        this.stateTimer = 0.3;
+        this.sprite.body.setVelocityX(this.facing * speed * (this.phaseTwo ? KING.phase2Speed : 1));
         this.vulnerable = false;
     }
 
-    completeShadowStep(player) {
-        this.stepMarker.setVisible(false);
-        this.sprite.setPosition(this.shadowStepX, this.floorTop - 65);
-        this.sprite.body.reset(this.shadowStepX, this.floorTop - 65);
-        this.sprite.setAlpha(1);
-        if (Math.abs(player.sprite.x - this.sprite.x) <= 120 && Math.abs(player.sprite.y - this.sprite.y) <= 130) {
-            player.takeDamage(25);
-        }
-        this.beginRecovery(1.4);
-    }
+    updateAttack(player, seconds) {
+        const attack = this.currentAttack;
+        const speed = this.phaseTwo ? KING.phase2Speed : 1;
+        const oldFrame = this.attackFrame;
+        this.attackElapsed += seconds;
+        this.attackFrame = frameAt(attack.sheet, this.attackElapsed, { loop: false, speed });
 
-    beginVoidRain(player) {
-        this.voidRainCooldown = 9;
-        this.voidRainX = [-160, -80, 0, 80, 160].map((offset) => Math.max(120, Math.min(1160, player.sprite.x + offset)));
-        this.voidMarkers.forEach((marker, index) => {
-            marker.setPosition(this.voidRainX[index], this.floorTop - 3);
-            marker.setVisible(true);
-        });
-        this.state = 'void-rain';
-        this.stateTimer = 0.8;
-    }
-
-    launchVoidOrbs() {
-        this.voidMarkers.forEach((marker) => marker.setVisible(false));
-        this.voidOrbs.forEach((orb, index) => {
-            if (orb.body.enable) {
-                return;
+        if (this.currentAttackName === 'sword') {
+            if (!this.attackTeleported && oldFrame < attack.teleportFrame && this.attackFrame >= attack.teleportFrame) {
+                const centerY = KING.floorY - KING.body.height / 2;
+                this.sprite.body.reset(this.attackLandX, centerY);
+                this.sprite.body.setAllowGravity(true);
+                this.sprite.body.setImmovable(false);
+                this.attackTeleported = true;
             }
-            orb.setPosition(this.voidRainX[index], 55);
-            orb.setVisible(true);
-            orb.body.enable = true;
-            orb.body.setAllowGravity(true);
-            orb.body.reset(this.voidRainX[index], 55);
-            orb.body.setVelocity(0, 0);
-            orb.life = 3;
-        });
+            this.untargetable = this.attackFrame >= attack.untargetableFrom && this.attackFrame <= attack.untargetableTo;
+            this.visualHidden = this.untargetable;
+            if (this.attackFrame >= attack.activeStart && this.attackFrame <= attack.activeEnd && !this.hitLanded) {
+                const dx = (player.sprite.x - this.sprite.x) * this.attackDir;
+                const feetAboveFloor = KING.floorY - player.sprite.body.bottom;
+                if (dx >= 0 && dx <= attack.hitRange && feetAboveFloor <= attack.airSafeHeight) {
+                    this.hitLanded = true;
+                    player.takeDamage(attack.damage, this.sprite.x, attack.knockback);
+                }
+            }
+        } else {
+            this.untargetable = false;
+            const active = this.attackFrame >= attack.activeStart && this.attackFrame <= attack.activeEnd;
+            if (active && !this.hitLanded) {
+                const distance = Math.abs(player.sprite.x - this.sprite.x);
+                if (distance <= attack.radius) {
+                    this.hitLanded = true;
+                    player.takeDamage(attack.damage, this.sprite.x, attack.knockback);
+                }
+            }
+        }
+
+        this.vulnerable = this.attackFrame >= attack.recoverStart;
+        this.updateAttackMarker();
+        if (this.attackFrame >= SHEETS[attack.sheet].frames - 1) {
+            this.currentAttack = null;
+            this.currentAttackName = null;
+            this.untargetable = false;
+            this.visualHidden = false;
+            this.vulnerable = true;
+            this.state = 'idle';
+            this.stateTimer = this.phaseTwo ? 0.5 : KING.idleTime;
+            this.attackMarker.clear();
+            this.attackMarker.setVisible(false);
+        }
     }
 
-    beginRecovery(duration) {
-        this.telegraph.setVisible(false);
-        this.state = 'recover';
-        this.stateTimer = duration;
-        this.vulnerable = true;
-    }
-
-    facePlayer(player) {
-        this.facing = player.sprite.x < this.sprite.x ? -1 : 1;
-    }
-
-    updateVisuals() {
-        if (!this.sprite || !this.sprite.active) {
+    updateAttackMarker() {
+        if (!this.currentAttack || !this.attackMarker || !this.attackMarker.active) {
             return;
         }
-        const x = this.sprite.x;
-        const y = this.sprite.y;
-        this.aura.setPosition(x, y + 12);
-        this.eyeLeft.setPosition(x - 15, y - 18);
-        this.eyeRight.setPosition(x + 15, y - 18);
-        this.telegraph.setPosition(x, y - 84);
+        const attack = this.currentAttack;
+        const frame = this.attackFrame;
+        this.attackMarker.clear();
+        if (this.currentAttackName === 'sword' && frame <= attack.markerEnd) {
+            this.attackMarker.setPosition(this.attackLandX, KING.floorY - 4);
+            this.attackMarker.lineStyle(3, 0xb36cff, 0.8 + (Math.sin(this.elapsed * 16) + 1) * 0.1);
+            this.attackMarker.beginPath();
+            this.attackMarker.arc(0, 0, 24 + (frame < 7 ? Math.sin(this.elapsed * 18) * 4 : 0), 0, Math.PI * 2);
+            this.attackMarker.strokePath();
+            this.attackMarker.fillStyle(0x843bce, 0.12);
+            this.attackMarker.fillEllipse(0, 0, 48, 8);
+            this.attackMarker.setVisible(true);
+        } else if (this.currentAttackName === 'tendril' && frame <= attack.markerEnd) {
+            this.attackMarker.setPosition(this.sprite.x, KING.floorY - 2);
+            this.attackMarker.lineStyle(4, 0xff4040, 0.8 + (Math.sin(this.elapsed * 16) + 1) * 0.1);
+            this.attackMarker.beginPath();
+            this.attackMarker.arc(0, 0, attack.radius, 0, Math.PI * 2);
+            this.attackMarker.strokePath();
+            this.attackMarker.setVisible(true);
+        } else if (this.currentAttackName === 'void' && frame <= attack.markerEnd) {
+            this.attackMarker.setPosition(this.sprite.x, KING.floorY - 2);
+            const radius = attack.radius * Math.min(1, frame / 14);
+            this.attackMarker.lineStyle(4, 0x9e5cff, 0.8);
+            this.attackMarker.beginPath();
+            this.attackMarker.arc(0, 0, radius, 0, Math.PI * 2);
+            this.attackMarker.strokePath();
+            this.attackMarker.setVisible(true);
+        } else {
+            this.attackMarker.setVisible(false);
+        }
     }
 
-    updateProjectiles(step) {
-        this.waveProjectiles.forEach((wave) => {
-            if (!wave || !wave.active || !wave.body.enable) {
-                return;
-            }
-            wave.life = Math.max(0, wave.life - step);
-            if (wave.life === 0) {
-                this.deactivateHazard(wave);
-            }
-        });
-        this.voidOrbs.forEach((orb) => {
-            if (!orb || !orb.active || !orb.body.enable) {
-                return;
-            }
-            orb.life = Math.max(0, orb.life - step);
-            if (orb.life === 0) {
-                this.deactivateHazard(orb);
-            }
-        });
-    }
-
-    deactivateHazard(hazard) {
-        if (!hazard || !hazard.active) {
+    poseVisual(delta) {
+        if (!this.visual || !this.visual.active || !this.sprite || !this.sprite.active) {
             return;
         }
-        hazard.body.enable = false;
-        hazard.body.setVelocity(0, 0);
-        hazard.setVisible(false);
+        let key = 'king-idle';
+        let frame = 0;
+        let elapsed = this.elapsed;
+        let speed = 1;
+        if (this.currentAttack) {
+            key = this.currentAttack.sheet;
+            frame = this.attackFrame;
+            elapsed = this.attackElapsed;
+            speed = this.phaseTwo ? KING.phase2Speed : 1;
+        } else if (this.state === 'approach' && Math.abs(this.sprite.body.velocity.x) > 1) {
+            const distance = this.scene.player ? Math.abs(this.scene.player.sprite.x - this.sprite.x) : 0;
+            key = distance > KING.runBeyond ? 'king-run' : 'king-walk';
+            frame = frameAt(key, this.elapsed, { speed: this.phaseTwo ? KING.phase2Speed : 1 });
+        } else {
+            frame = frameAt(key, elapsed);
+        }
+
+        if (this.currentAttack && this.currentAttack.sheet === key) {
+            frame = frameAt(key, elapsed, { loop: false, speed });
+        }
+        showFrame(this.visual, key, frame, this.facing);
+        this.visual.setPosition(this.sprite.x, this.sprite.y + KING.body.height / 2);
+        this.visual.setVisible(!this.visualHidden);
+        this.aura.setPosition(this.sprite.x, this.sprite.y + 5);
+        this.aura.setAlpha(0.14 + (Math.sin(this.elapsed * 4) + 1) * 0.06);
+        this.eyeLeft.setPosition(this.sprite.x - 15, this.sprite.y + 20);
+        this.eyeRight.setPosition(this.sprite.x + 15, this.sprite.y + 20);
+        if (this.flashTimer > 0) {
+            this.visual.setTint(0xffffff).setTintMode(TintModes.FILL);
+        } else if (this.phaseTwo) {
+            this.visual.setTint(0x7251aa);
+        } else {
+            this.visual.clearTint();
+        }
+    }
+
+    flashEyes() {
+        if (!this.eyeLeft || !this.eyeLeft.active || !this.eyeRight || !this.eyeRight.active) {
+            return;
+        }
+        this.eyeFlashTimer = KING.eyeFlashDuration;
+        this.eyeLeft.setFillStyle(0xf4e9ff, 1);
+        this.eyeRight.setFillStyle(0xf4e9ff, 1);
     }
 
     applyDamage(amount, fromX) {
-        if (!this.sprite || !this.sprite.active || this.isDefeated) {
+        if (!this.sprite || !this.sprite.active || this.isDefeated || this.untargetable) {
             return;
         }
-        const damage = this.vulnerable ? amount : Math.max(1, Math.round(amount * 0.1));
+        const damage = this.vulnerable ? amount : KING.chipDamage;
         this.health = Math.max(0, this.health - damage);
-        this.hitFlashTimer = 0.09;
-        this.sprite.setFillStyle(0xffffff);
+        this.flashTimer = KING.hitFlashDuration;
         if (this.health <= 0) {
             this.defeat();
         }
@@ -440,50 +405,32 @@ export default class KingOfDark {
         }
         this.isDefeated = true;
         this.combatStarted = false;
+        this.untargetable = true;
         this.sprite.body.enable = false;
-        this.auraTween.stop();
         this.scene.physics.world.pause();
-        this.playerLock();
-        this.deathStage = 'freeze';
-        this.deathTimer = 0.4;
-    }
-
-    playerLock() {
-        const player = this.scene.player;
-        if (!player || !player.sprite || !player.sprite.active) {
-            return;
+        if (this.scene.player && this.scene.player.sprite && this.scene.player.sprite.active) {
+            this.scene.player.controlsLocked = true;
+            this.scene.player.sprite.body.setVelocity(0, 0);
         }
-        player.controlsLocked = true;
-        player.sprite.body.setVelocity(0, 0);
+        this.deathStage = 'freeze';
+        this.deathTimer = KING.deathFreeze;
     }
 
-    updateDeath(step) {
+    updateDeath(seconds) {
         if (this.deathStage !== 'freeze') {
             return;
         }
-        this.deathTimer = Math.max(0, this.deathTimer - step);
+        this.deathTimer = Math.max(0, this.deathTimer - seconds);
         if (this.deathTimer > 0) {
             return;
         }
         this.scene.physics.world.resume();
         this.scene.cameras.main.flash(350, 255, 255, 255);
         this.scene.cameras.main.shake(350, 0.012);
-        this.deathCircle.setPosition(this.sprite.x, this.sprite.y);
+        this.deathCircle.setPosition(this.sprite.x, this.sprite.y + KING.body.height / 2);
         this.deathCircle.setScale(0);
         this.deathCircle.setVisible(true);
         this.deathStage = 'expand';
         this.deathTween.restart();
-    }
-
-    destroyEffects() {
-        if (this.auraTween) {
-            this.auraTween.stop();
-        }
-        if (this.deathTween) {
-            this.deathTween.stop();
-        }
-        if (this.deathStage === 'freeze' && this.scene && this.scene.physics) {
-            this.scene.physics.world.resume();
-        }
     }
 }

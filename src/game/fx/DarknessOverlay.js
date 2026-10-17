@@ -52,7 +52,12 @@ export default class DarknessOverlay {
             }));
         }
 
-        scene.events.once('shutdown', () => this.destroy());
+        scene.events.once('shutdown', () => {
+            if (!this.image || !this.image.active) {
+                return;
+            }
+            this.destroy();
+        });
     }
 
     createTextures() {

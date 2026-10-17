@@ -66,6 +66,9 @@ export default class IntroScene extends Scene {
         this.dialogueBox = new DialogueBox(this);
         this.activeDialogueCue = null;
 
+        // Build Street Scene (Shot 2) camera schedule from cameraFrames and DIALOGUE cues
+        this.initStreetCameraSchedule();
+
         // Precompute all speech bubble cues (pacing, wrapping, sizing)
         this.precomputedCues = {};
         this.spedUpCues = [];
@@ -192,6 +195,62 @@ export default class IntroScene extends Scene {
         this.events.once('shutdown', this.cleanup, this);
     }
 
+    initStreetCameraSchedule() {
+        const config = INTRO_ACTORS.cameraFrames?.['intro-2'];
+        this.streetCameraMoves = [];
+        this.streetCameraConfig = config;
+
+        if (!config) {
+            return;
+        }
+
+        const streetCues = DIALOGUE.filter((cue) => cue.shot === 'market');
+        const getSpeakerTargetFrame = (speaker, current) => {
+            const s = (speaker || '').toUpperCase().trim();
+            if (s === 'MOTHER' || s === 'MOM' || s === 'MA') return 'B';
+            if (s === 'CUSTOMER' || s === 'BUYER' || s === 'SHOPKEEPER' || s === 'SHOP' || s === 'SHOP KEEPER') return 'A';
+            return current; // HERO keeps active frame
+        };
+
+        let currentFrame = config.startFrame || 'A';
+        for (let i = 0; i < streetCues.length; i++) {
+            const cue = streetCues[i];
+            const targetFrame = getSpeakerTargetFrame(cue.speaker, currentFrame);
+            if (targetFrame !== currentFrame) {
+                const fromFrame = currentFrame;
+                const toFrame = targetFrame;
+                const targetArrive = cue.start + (config.arriveAfterCueStart ?? 0.2);
+                const prevCueStart = i > 0 ? streetCues[i - 1].start : 6.0;
+
+                let duration = config.moveSeconds ?? 1.2;
+                let startTime = targetArrive - duration;
+                let shortened = false;
+                const originalDuration = duration;
+
+                if (startTime < prevCueStart) {
+                    duration = targetArrive - prevCueStart;
+                    startTime = prevCueStart;
+                    shortened = true;
+                }
+
+                this.streetCameraMoves.push({
+                    fromFrame,
+                    toFrame,
+                    fromConfig: config[fromFrame],
+                    toConfig: config[toFrame],
+                    startTime,
+                    endTime: targetArrive,
+                    duration,
+                    shortened,
+                    originalDuration,
+                    triggeredByCue: cue,
+                });
+
+                currentFrame = targetFrame;
+            }
+        }
+    }
+
     getCurrentPictureKey() {
         if (this.t < 6.0) return 'intro-1';
         if (this.t < 21.0) return 'intro-2';
@@ -312,7 +371,7 @@ export default class IntroScene extends Scene {
         let camY = 384;
 
         if (t < 6.0) {
-            // Shot 1: village camera zoom/focus
+            // Shot 1: village camera zoom/focus (unchanged)
             const shot = SHOTS[0];
             const p = Math.max(0, Math.min(1, t / 6.0));
             const ep = easeSineInOut(p);
@@ -320,44 +379,38 @@ export default class IntroScene extends Scene {
             camX = shot.camera.from.x + (shot.camera.to.x - shot.camera.from.x) * ep;
             camY = shot.camera.from.y + (shot.camera.to.y - shot.camera.from.y) * ep;
         } else if (t < 21.0) {
-            // Shot 2: market camera segments with hero head focus overrides
-            const segments = SHOTS[1].camera;
-            let activeIndex = segments.length - 1;
-            for (let i = 0; i < segments.length; i++) {
-                if (t < segments[i].to) {
-                    activeIndex = i;
-                    break;
+            // Shot 2: market street scene camera scheduled from cameraFrames['intro-2']
+            const config = this.streetCameraConfig;
+            if (config) {
+                let currentZoom = config[config.startFrame || 'A'].zoom;
+                let currentX = config[config.startFrame || 'A'].x;
+                let currentY = config[config.startFrame || 'A'].y;
+
+                for (const move of this.streetCameraMoves) {
+                    if (t < move.startTime) {
+                        currentZoom = move.fromConfig.zoom;
+                        currentX = move.fromConfig.x;
+                        currentY = move.fromConfig.y;
+                        break;
+                    } else if (t <= move.endTime) {
+                        const p = (t - move.startTime) / move.duration;
+                        const ep = easeSineInOut(p);
+                        currentZoom = move.fromConfig.zoom + (move.toConfig.zoom - move.fromConfig.zoom) * ep;
+                        currentX = move.fromConfig.x + (move.toConfig.x - move.fromConfig.x) * ep;
+                        currentY = move.fromConfig.y + (move.toConfig.y - move.fromConfig.y) * ep;
+                        break;
+                    } else {
+                        currentZoom = move.toConfig.zoom;
+                        currentX = move.toConfig.x;
+                        currentY = move.toConfig.y;
+                    }
                 }
-            }
-
-            const getSegmentTarget = (index) => {
-                const s = segments[index];
-                const override = INTRO_ACTORS.cameraOverrides?.market?.find((o) => o.index === index);
-                return {
-                    zoom: s.zoom,
-                    x: override ? override.x : s.x,
-                    y: override ? override.y : s.y,
-                    hold: s.hold,
-                    from: s.from,
-                    to: s.to,
-                };
-            };
-
-            const seg = getSegmentTarget(activeIndex);
-            if (seg.hold || activeIndex === 0) {
-                zoom = seg.zoom;
-                camX = seg.x;
-                camY = seg.y;
-            } else {
-                const prevSeg = getSegmentTarget(activeIndex - 1);
-                const p = Math.max(0, Math.min(1, (t - seg.from) / (seg.to - seg.from)));
-                const ep = easeSineInOut(p);
-                zoom = prevSeg.zoom + (seg.zoom - prevSeg.zoom) * ep;
-                camX = prevSeg.x + (seg.x - prevSeg.x) * ep;
-                camY = prevSeg.y + (seg.y - prevSeg.y) * ep;
+                zoom = currentZoom;
+                camX = currentX;
+                camY = currentY;
             }
         } else {
-            // Shot 3: temple camera
+            // Shot 3: temple camera (unchanged)
             const shot = SHOTS[2];
             const cam = shot.camera;
             if (t <= cam.startAt) {

@@ -7,8 +7,10 @@ export default class SpeechBubble {
         this.scene = scene;
         this.cue = null;
         this.precomputed = null;
+        this.borderColor = 0x7e5a40;
 
         const style = INTRO_ACTORS.bubble;
+        const showName = style.showName ?? false;
 
         this.container = scene.add.container(0, 0)
             .setScrollFactor(0)
@@ -17,12 +19,18 @@ export default class SpeechBubble {
 
         this.graphics = scene.add.graphics();
 
-        this.nameText = scene.add.text(0, 0, '', {
-            fontFamily: 'Arial Black, Arial, sans-serif',
-            fontSize: `${style.namePx}px`,
-            stroke: '#000000',
-            strokeThickness: 3,
-        });
+        if (showName) {
+            this.nameText = scene.add.text(0, 0, '', {
+                fontFamily: 'Arial Black, Arial, sans-serif',
+                fontSize: `${style.namePx}px`,
+                stroke: '#000000',
+                strokeThickness: 3,
+            });
+            this.container.add([this.graphics, this.nameText]);
+        } else {
+            this.nameText = null;
+            this.container.add([this.graphics]);
+        }
 
         this.bodyText = scene.add.text(0, 0, '', {
             fontFamily: 'Arial, sans-serif',
@@ -32,15 +40,7 @@ export default class SpeechBubble {
             strokeThickness: 3,
         });
 
-        this.container.add([this.graphics, this.nameText, this.bodyText]);
-
-        // Measuring text for word wrapping
-        const maxTextWidth = style.maxWidth - style.padding * 2;
-        this.measureText = scene.add.text(0, 0, '', {
-            fontFamily: 'Arial, sans-serif',
-            fontSize: `${style.fontSize}px`,
-            wordWrap: { width: maxTextWidth, useAdvancedWrap: false },
-        }).setVisible(false);
+        this.container.add([this.bodyText]);
     }
 
     /**
@@ -49,13 +49,13 @@ export default class SpeechBubble {
     static precomputeCue(cue, bubbleStyle, pacing) {
         const text = cue.text;
         const maxTextWidth = bubbleStyle.maxWidth - bubbleStyle.padding * 2;
+        const showName = bubbleStyle.showName ?? false;
 
         // Wrap full text using standard word wrap
         const words = text.split(' ');
         let currentLine = '';
         const lines = [];
 
-        // Simple and robust canvas-based text measurement fallback
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         context.font = `${bubbleStyle.fontSize}px Arial`;
@@ -85,17 +85,25 @@ export default class SpeechBubble {
             }
         }
 
-        context.font = `bold ${bubbleStyle.namePx}px "Arial Black", Arial`;
-        const nameWidth = context.measureText(cue.speaker || '').width;
-
         const bodyWidth = Math.ceil(maxLineWidth);
         const lineHeight = bubbleStyle.fontSize * 1.25;
         const bodyHeight = Math.ceil(lines.length * lineHeight);
-        const nameHeight = Math.ceil(bubbleStyle.namePx * 1.2);
 
-        const innerWidth = Math.max(nameWidth, bodyWidth);
-        const pw = Math.ceil(innerWidth + bubbleStyle.padding * 2);
-        const ph = Math.ceil(bubbleStyle.padding * 2 + nameHeight + 4 + bodyHeight);
+        let pw = 0;
+        let ph = 0;
+        let nameHeight = 0;
+
+        if (showName) {
+            context.font = `bold ${bubbleStyle.namePx}px "Arial Black", Arial`;
+            const nameWidth = context.measureText(cue.speaker || '').width;
+            nameHeight = Math.ceil(bubbleStyle.namePx * 1.2);
+            const innerWidth = Math.max(nameWidth, bodyWidth);
+            pw = Math.ceil(innerWidth + bubbleStyle.padding * 2);
+            ph = Math.ceil(bubbleStyle.padding * 2 + nameHeight + 4 + bodyHeight);
+        } else {
+            pw = Math.ceil(bodyWidth + bubbleStyle.padding * 2);
+            ph = Math.ceil(bubbleStyle.padding * 2 + bodyHeight);
+        }
 
         // Precompute character reveal times with pacing
         const cueDuration = cue.end - cue.start;
@@ -148,11 +156,17 @@ export default class SpeechBubble {
         this.container.setVisible(true);
 
         const rawColor = SPEAKER_COLORS[cue.speaker] ?? 0xf5d58a;
-        const hexColor = typeof rawColor === 'number'
-            ? `#${rawColor.toString(16).padStart(6, '0')}`
-            : rawColor;
+        this.borderColor = typeof rawColor === 'number'
+            ? rawColor
+            : parseInt(rawColor.replace('#', '0x'), 16);
 
-        this.nameText.setText(cue.speaker || '').setColor(hexColor);
+        if (this.nameText) {
+            const hexColor = typeof rawColor === 'number'
+                ? `#${rawColor.toString(16).padStart(6, '0')}`
+                : rawColor;
+            this.nameText.setText(cue.speaker || '').setColor(hexColor);
+        }
+
         this.bodyText.setText('');
     }
 
@@ -221,14 +235,14 @@ export default class SpeechBubble {
         const tailBaseCenterX = PMath.Clamp(sx, panelX + 18, panelX + pw - 18);
         const tailBaseY = panelY + ph;
 
-        // Draw graphics panel and tail
+        // Draw graphics panel and tail with speaker-colored border
         this.graphics.clear();
 
         const panelColor = style.panelColor || 0x120f1a;
         const panelAlpha = (style.panelAlpha || 0.9) * alpha;
 
         this.graphics.fillStyle(panelColor, panelAlpha);
-        this.graphics.lineStyle(style.borderPx || 2, 0x4d3b58, alpha * 0.9);
+        this.graphics.lineStyle(style.borderPx || 2, this.borderColor || 0x7e5a40, alpha * 0.95);
 
         // Rounded panel
         this.graphics.fillRoundedRect(panelX, panelY, pw, ph, 8);
@@ -242,7 +256,7 @@ export default class SpeechBubble {
         this.graphics.closePath();
         this.graphics.fillPath();
 
-        // Stroke tail sides
+        // Stroke tail sides with speaker border color
         this.graphics.beginPath();
         this.graphics.moveTo(tailBaseCenterX - 8, tailBaseY);
         this.graphics.lineTo(sx, sy);
@@ -251,10 +265,14 @@ export default class SpeechBubble {
 
         // Text positioning and alpha
         const padding = style.padding || 14;
-        this.nameText.setPosition(panelX + padding, panelY + padding);
-        this.bodyText.setPosition(panelX + padding, panelY + padding + this.precomputed.nameHeight + 4);
+        if (this.nameText) {
+            this.nameText.setPosition(panelX + padding, panelY + padding);
+            this.nameText.setAlpha(alpha);
+            this.bodyText.setPosition(panelX + padding, panelY + padding + this.precomputed.nameHeight + 4);
+        } else {
+            this.bodyText.setPosition(panelX + padding, panelY + padding);
+        }
 
-        this.nameText.setAlpha(alpha);
         this.bodyText.setAlpha(alpha);
 
         return true;
@@ -267,9 +285,6 @@ export default class SpeechBubble {
     }
 
     destroy() {
-        if (this.measureText && this.measureText.active) {
-            this.measureText.destroy();
-        }
         if (this.container && this.container.active) {
             this.container.destroy();
         }

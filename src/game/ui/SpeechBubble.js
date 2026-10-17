@@ -1,6 +1,6 @@
 import { Math as PMath } from 'phaser';
 import { INTRO_ACTORS } from '../config/introActors';
-import { SPEAKER_COLORS } from '../config/introData';
+import { EFFECTS, SPEAKER_COLORS } from '../config/introData';
 
 export default class SpeechBubble {
     constructor(scene) {
@@ -20,7 +20,7 @@ export default class SpeechBubble {
 
         this.bodyText = scene.add.text(0, 0, '', {
             fontFamily: 'Arial, sans-serif',
-            fontSize: `${style.fontSize || 14}px`,
+            fontSize: `${style.fontSize ?? 14}px`,
             color: style.textColor || '#f2ecff',
             stroke: '#000000',
             strokeThickness: 3,
@@ -39,9 +39,9 @@ export default class SpeechBubble {
      */
     static precomputeCue(cue, bubbleStyle, pacing) {
         const text = cue.text;
-        const fontSize = bubbleStyle.fontSize || 14;
-        const padding = bubbleStyle.padding || 10;
-        const maxTextWidth = bubbleStyle.maxWidth || 210;
+        const fontSize = bubbleStyle.fontSize ?? 14;
+        const padding = bubbleStyle.padding ?? 10;
+        const maxTextWidth = bubbleStyle.maxWidth ?? 210;
 
         // Wrap full text at base font size so wrapping never reflows
         const words = text.split(' ');
@@ -147,7 +147,7 @@ export default class SpeechBubble {
         this.bodyText.setText('');
     }
 
-    update(t, anchorScreenX, anchorScreenY) {
+    update(t, anchorScreenX, anchorScreenY, cameraZoom = this.scene.cameras.main.zoom) {
         if (!this.cue || !this.precomputed) {
             return false;
         }
@@ -190,10 +190,10 @@ export default class SpeechBubble {
         }
         this.bodyText.setText(fullWrapped.slice(0, strIndex));
 
-        // Container scale from camera zoom: zoomS = clamp(cam.zoom / 1.8, 0.65, 0.95)
+        // Container scale follows the configured camera zoom range.
         const cam = this.scene.cameras.main;
-        const zoom = cam.zoom;
-        const zoomScale = style.zoomScale || { ref: 1.8, min: 0.65, max: 0.95 };
+        const zoom = cameraZoom;
+        const zoomScale = style.zoomScale || { ref: 1.0, min: 0.8, max: 1.15 };
         let s = PMath.Clamp(zoom / zoomScale.ref, zoomScale.min, zoomScale.max);
 
         // Optional debug multiplier
@@ -201,15 +201,15 @@ export default class SpeechBubble {
             s *= this.scene.bubbleScaleMultiplier;
         }
 
-        // Cap maximum bubble dimensions to 25% screen width and 20% screen height
+        // Cap bubble dimensions to the configured screen fractions.
         const screenW = this.scene.scale.width;
         const screenH = this.scene.scale.height;
-        const maxW = (style.fit?.maxWidthFrac || 0.25) * screenW; // 320px
-        const maxH = (style.fit?.maxHeightFrac || 0.20) * screenH; // 144px
+        const maxW = (style.fit?.maxWidthFrac ?? 0.25) * screenW;
+        const maxH = (style.fit?.maxHeightFrac ?? 0.20) * screenH;
 
         const pw = this.precomputed.pw;
         const ph = this.precomputed.ph;
-        const tailPx = style.tailPx || 9;
+        const tailPx = style.tailPx ?? 9;
 
         let w = pw * s;
         let h = ph * s;
@@ -217,27 +217,28 @@ export default class SpeechBubble {
         if (w > maxW || h > maxH) {
             const reduceFactor = Math.min(maxW / w, maxH / h);
             s *= reduceFactor;
-            const minScale = (style.fit?.minFontPx || 10) / (style.fontSize || 14);
+            const minScale = (style.fit?.minFontPx ?? 10) / (style.fontSize ?? 14);
             s = Math.max(minScale, s);
             w = pw * s;
             h = ph * s;
         }
 
         const scaledTail = tailPx * s;
-        const safeMargin = style.safeMargin || 20;
+        const safeMargin = style.safeMargin ?? 20;
 
-        // Screen boundaries between letterbox bars (90px top and bottom)
+        // Panels stay inside the clear area between letterbox bars.
         const minX = safeMargin;
         const maxX = screenW - safeMargin - w;
-        const minY = 90 + 4;
-        const maxY = screenH - 90 - 4 - h;
+        const letterboxHeight = EFFECTS.letterbox?.heightPx ?? 90;
+        const minY = letterboxHeight;
+        const maxY = screenH - letterboxHeight - h;
 
         const sx = anchorScreenX;
         const sy = anchorScreenY;
 
-        // Horizontal positioning: centered over anchor, clamped to screen bounds
-        let panelScreenX = sx - w / 2;
-        panelScreenX = PMath.Clamp(panelScreenX, minX, maxX);
+        const wantedPanelScreenX = sx - w / 2;
+        const panelScreenX = PMath.Clamp(wantedPanelScreenX, minX, maxX);
+        let clamped = panelScreenX !== wantedPanelScreenX;
 
         // Vertical positioning: above head if fits, otherwise FLIP below head
         let panelScreenY = 0;
@@ -245,11 +246,15 @@ export default class SpeechBubble {
 
         if (sy - scaledTail - h >= minY) {
             // Normal placement above head
-            panelScreenY = Math.min(maxY, Math.max(minY, sy - scaledTail - h));
+            const wantedPanelScreenY = sy - scaledTail - h;
+            panelScreenY = Math.min(maxY, Math.max(minY, wantedPanelScreenY));
+            clamped ||= panelScreenY !== wantedPanelScreenY;
             flippedBelow = false;
         } else {
             // Flipped below character's head with tail pointing UP
-            panelScreenY = Math.max(minY, Math.min(maxY, sy + scaledTail));
+            const wantedPanelScreenY = sy + scaledTail;
+            panelScreenY = Math.max(minY, Math.min(maxY, wantedPanelScreenY));
+            clamped ||= panelScreenY !== wantedPanelScreenY;
             flippedBelow = true;
         }
 
@@ -263,7 +268,7 @@ export default class SpeechBubble {
         const localSx = (sx - containerX) / s;
         const localSy = (sy - containerY) / s;
 
-        const padding = style.padding || 10;
+        const padding = style.padding ?? 10;
         const tailBaseCenterX = PMath.Clamp(localSx, padding + 6, pw - padding - 6);
 
         // Draw panel and tail with speaker-colored border
@@ -314,7 +319,7 @@ export default class SpeechBubble {
         this.bodyText.setPosition(padding, padding);
         this.bodyText.setAlpha(alpha);
 
-        return true;
+        return { scale: s, width: w, height: h, clamped, flipped: flippedBelow };
     }
 
     hide() {

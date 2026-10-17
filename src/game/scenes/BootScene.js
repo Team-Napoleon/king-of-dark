@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { preloadSheets } from '../config/animationData';
+import { INTRO_ACTORS } from '../config/introActors';
 import { preloadIntroImages } from '../config/introData';
 
 export default class BootScene extends Scene {
@@ -42,6 +43,10 @@ export default class BootScene extends Scene {
 
         preloadSheets(this);
         preloadIntroImages(this);
+        const streetHero = INTRO_ACTORS.hero.byImage['intro-2'];
+        if (streetHero?.kind === 'image') {
+            this.load.image(streetHero.texture, 'assets/Hero/hero-intro2.png');
+        }
         this.load.image('hero-chibi', 'assets/Hero/hero_chibi_left_gray_hair.png');
         this.load.image('bg-menu', 'assets/backgrounds/menu.jpg');
         this.load.image('bg-temple', 'assets/backgrounds/temple.jpg');

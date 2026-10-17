@@ -1,4 +1,4 @@
-import { Scene } from 'phaser';
+import { BlendModes, Scene } from 'phaser';
 import {
     IMG_SCALE,
     WORLD,
@@ -44,14 +44,27 @@ export default class IntroScene extends Scene {
                 .setVisible(false);
             this.shotImages[shot.id] = img;
         });
+        this.createSwingRig();
 
-        // Hero visual and shadow (single instance moved between shots)
+        // The market hero is a picture; the temple hero remains the gameplay sprite.
         this.heroShadow = this.add.graphics()
             .setDepth(9)
             .setVisible(false);
 
         this.heroSprite = this.add.image(0, 0, 'hero-chibi')
             .setDepth(10)
+            .setVisible(false);
+
+        const streetHero = INTRO_ACTORS.hero.byImage['intro-2'];
+        this.streetHeroImage = this.add.image(0, 0, streetHero.texture)
+            .setOrigin(streetHero.feetAnchorFracX, 1)
+            .setDepth(10)
+            .setTint(streetHero.tint)
+            .setVisible(false);
+
+        this.heroEyeGlow = this.add.graphics()
+            .setDepth(11)
+            .setBlendMode(BlendModes.ADD)
             .setVisible(false);
 
         // Letterbox bars helper
@@ -61,9 +74,6 @@ export default class IntroScene extends Scene {
         // Timed DialogueBox fallback (for unanchored lines like Narrator)
         this.dialogueBox = new DialogueBox(this);
         this.activeDialogueCue = null;
-
-        // Build Street Scene (Shot 2) camera schedule from cameraFrames and DIALOGUE cues
-        this.initStreetCameraSchedule();
 
         // Precompute all speech bubble cues (pacing, wrapping, sizing)
         this.precomputedCues = {};
@@ -81,6 +91,11 @@ export default class IntroScene extends Scene {
                 });
             }
         });
+        this.loggedBubbleCueIds = new Set();
+        this.finalDialogueCue = DIALOGUE[DIALOGUE.length - 1];
+        this.finalDialogueCompleteAt = this.finalDialogueCue
+            ? this.finalDialogueCue.start + this.precomputedCues[this.finalDialogueCue.id].totalDuration
+            : INTRO_FLOW.totalDuration;
 
         // Speech bubble pool
         const poolSize = INTRO_ACTORS.bubble.pool || 2;
@@ -89,6 +104,7 @@ export default class IntroScene extends Scene {
         // Set initial camera focus and zoom at t = 0
         this.updateCamera(0);
         this.updatePictures(0);
+        this.updateSwing(0);
         this.updateHero(0);
 
         // SKIP button container (top-right screen position)
@@ -155,6 +171,9 @@ export default class IntroScene extends Scene {
                 }
                 if (event.code === 'KeyH') {
                     this.placementToolActive = !this.placementToolActive;
+                    if (!this.placementToolActive) {
+                        this.placementFacingOverride = null;
+                    }
                     console.log(`[Hero Placement Tool] ${this.placementToolActive ? 'ENABLED' : 'DISABLED'}`);
                     return;
                 }
@@ -184,14 +203,19 @@ export default class IntroScene extends Scene {
                     entry.heightSrc = Math.round(entry.heightSrc * 1.02);
                     this.updateHero(this.t);
                 } else if (event.code === 'KeyF') {
-                    entry.facing = entry.facing === 'left' ? 'right' : 'left';
+                    const currentFacing = this.getHeroFacing(this.t, pictureKey);
+                    if (entry.kind === 'image') {
+                        this.placementFacingOverride = currentFacing === 'left' ? 'right' : 'left';
+                    } else {
+                        entry.facing = entry.facing === 'left' ? 'right' : 'left';
+                    }
                     this.updateHero(this.t);
                 } else if (event.code === 'KeyP') {
                     console.log(`[Hero Placement: ${pictureKey}]`, {
                         feetX: entry.feetX,
                         feetY: entry.feetY,
                         heightSrc: entry.heightSrc,
-                        facing: entry.facing,
+                        facing: this.currentHeroFacing || entry.facing,
                         bubbleScaleMultiplier: this.bubbleScaleMultiplier,
                     });
                 }
@@ -199,66 +223,12 @@ export default class IntroScene extends Scene {
             this.input.keyboard.on('keydown', this.onPlacementKeyDown);
         }
 
+        if (INTRO_DEBUG.enabled && import.meta.env.DEV && this.spedUpCues.length > 0) {
+            console.warn('[bubble] cues requiring pacing scale:', this.spedUpCues);
+        }
+
         // Clean up on shutdown
         this.events.once('shutdown', this.cleanup, this);
-    }
-
-    initStreetCameraSchedule() {
-        const config = INTRO_ACTORS.cameraFrames?.['intro-2'];
-        this.streetCameraMoves = [];
-        this.streetCameraConfig = config;
-
-        if (!config) {
-            return;
-        }
-
-        const streetCues = DIALOGUE.filter((cue) => cue.shot === 'market');
-        const getSpeakerTargetFrame = (speaker, current) => {
-            const s = (speaker || '').toUpperCase().trim();
-            if (s === 'MOTHER' || s === 'MOM' || s === 'MA') return 'B';
-            if (s === 'CUSTOMER' || s === 'BUYER' || s === 'SHOPKEEPER' || s === 'SHOP' || s === 'SHOP KEEPER') return 'A';
-            return current; // HERO keeps active frame
-        };
-
-        let currentFrame = config.startFrame || 'A';
-        for (let i = 0; i < streetCues.length; i++) {
-            const cue = streetCues[i];
-            const targetFrame = getSpeakerTargetFrame(cue.speaker, currentFrame);
-            if (targetFrame !== currentFrame) {
-                const fromFrame = currentFrame;
-                const toFrame = targetFrame;
-                // Arrives 0.3s BEFORE Mother begins her line over 1.2s pan
-                const arriveBefore = config.arriveBeforeCueStart ?? 0.3;
-                const targetArrive = cue.start - arriveBefore;
-                let duration = config.moveSeconds ?? 1.2;
-                let startTime = targetArrive - duration;
-
-                const prevCueEnd = i > 0 ? streetCues[i - 1].end : 8.8;
-                let shortened = false;
-                const originalDuration = duration;
-
-                if (startTime < prevCueEnd) {
-                    startTime = prevCueEnd;
-                    duration = targetArrive - startTime;
-                    shortened = true;
-                }
-
-                this.streetCameraMoves.push({
-                    fromFrame,
-                    toFrame,
-                    fromConfig: config[fromFrame],
-                    toConfig: config[toFrame],
-                    startTime,
-                    endTime: targetArrive,
-                    duration,
-                    shortened,
-                    originalDuration,
-                    triggeredByCue: cue,
-                });
-
-                currentFrame = targetFrame;
-            }
-        }
     }
 
     getCurrentPictureKey() {
@@ -269,110 +239,167 @@ export default class IntroScene extends Scene {
         return 'intro-3';
     }
 
+    createSwingRig() {
+        const swing = EFFECTS.swing;
+        if (!swing) {
+            return;
+        }
+
+        const textureKey = 'intro-swing-rig';
+        if (!this.textures.exists(textureKey)) {
+            const source = this.textures.get(swing.image).getSourceImage();
+            const { x, y, w, h } = swing.crop;
+            const texture = this.textures.createCanvas(textureKey, w, h);
+            if (!texture) {
+                throw new Error(`Unable to create intro swing texture: ${textureKey}`);
+            }
+            texture.getContext().drawImage(source, x, y, w, h, 0, 0, w, h);
+            texture.refresh();
+        }
+
+        const { x, y, w, h } = swing.crop;
+        const pivot = toWorld(swing.pivot.x, swing.pivot.y);
+        this.swingSprite = this.add.image(pivot.x, pivot.y, textureKey)
+            .setOrigin((swing.pivot.x - x) / w, (swing.pivot.y - y) / h)
+            .setScale(IMG_SCALE)
+            .setDepth(4)
+            .setVisible(false);
+    }
+
+    updateSwing(t) {
+        if (!this.swingSprite || !this.swingSprite.active) {
+            return;
+        }
+
+        const swing = EFFECTS.swing;
+        const marketEnd = SHOTS.find((shot) => shot.id === 'market')?.end ?? swing.keepSwingingUntil;
+        const visible = t >= swing.startAt && t < marketEnd;
+        this.swingSprite.setVisible(visible);
+        if (!visible) {
+            return;
+        }
+
+        const released = t >= (swing.afterLetGo?.at ?? Number.POSITIVE_INFINITY);
+        const amplitude = released ? swing.afterLetGo.amplitudeDeg : swing.amplitudeDeg;
+        const phase = ((t - swing.startAt) / swing.periodSec) * Math.PI * 2;
+        this.swingSprite
+            .setAlpha(this.shotImages.market.alpha)
+            .setRotation(Math.sin(phase) * amplitude * (Math.PI / 180));
+    }
+
     getHeroFacing(t, pictureKey) {
         const entry = INTRO_ACTORS.hero.byImage[pictureKey];
         if (!entry) return 'left';
 
-        if (pictureKey === 'intro-2') {
-            const cues = DIALOGUE.filter((c) => c.shot === 'market');
-            // Check if any dialogue cue is actively speaking
-            const activeCue = cues.find((c) => t >= c.start && t < c.end);
-            if (activeCue) {
-                if (activeCue.heroFacing) return activeCue.heroFacing;
-                const spk = (activeCue.speaker || '').toUpperCase().trim();
-                if (spk === 'HERO') {
-                    // h1 replies to stall conversation (right); h2, h3 address Mother (left)
-                    return activeCue.id === 'h1' ? 'right' : 'left';
+        if (entry.kind === 'image') {
+            let facing = entry.initialFacing;
+            for (const cue of DIALOGUE) {
+                if (cue.shot !== 'market' || cue.start > t) {
+                    continue;
                 }
-                const shotAnchors = INTRO_ACTORS.bubbleAnchors['intro-2'] || {};
-                const anchorSrc = shotAnchors[spk];
-                if (anchorSrc) {
-                    return anchorSrc.x > entry.feetX ? 'right' : 'left';
+                const speaker = (cue.speaker || '').toUpperCase().trim();
+                const mappedFacing = entry.facingBySpeaker?.[speaker];
+                if (mappedFacing) {
+                    facing = mappedFacing;
                 }
             }
-
-            // Dialogue transitions / between cues:
-            // When camera begins pan to Frame B (Mother + Hero) at 25.5s, Hero turns to face Mother
-            if (t >= 25.5) {
-                return 'left';
-            }
-            // Once market stall scene begins at 9.6s, Hero faces right towards the stall
-            if (t >= 9.6) {
-                return 'right';
-            }
+            return facing;
         }
 
         return entry.facing || 'left';
     }
 
     updateHero(t) {
-        if (!this.heroSprite || !this.heroSprite.active) {
-            return;
-        }
-
         const pictureKey = this.getCurrentPictureKey();
         const entry = INTRO_ACTORS.hero.byImage[pictureKey];
-
-        if (!entry) {
+        const isMarketPicture = entry?.kind === 'image' && pictureKey === 'intro-2';
+        const isGameplaySprite = entry?.kind === 'sprite' && pictureKey === 'intro-3';
+        if (this.heroSprite?.active) {
+            this.heroSprite.setVisible(false);
+        }
+        if (this.streetHeroImage?.active) {
+            this.streetHeroImage.setVisible(false);
+        }
+        if (!entry || (!isMarketPicture && !isGameplaySprite)) {
             this.heroSprite.setVisible(false);
             this.heroShadow.setVisible(false);
             return;
         }
 
-        // Match hero visual opacity to picture crossfades
-        let pictureAlpha = 1.0;
-        if (pictureKey === 'intro-2' && this.shotImages.market) {
-            pictureAlpha = this.shotImages.market.alpha;
-        } else if (pictureKey === 'intro-3' && this.shotImages.temple) {
-            pictureAlpha = this.shotImages.temple.alpha;
-        }
+        const pictureAlpha = this.shotImages[pictureKey === 'intro-2' ? 'market' : 'temple']?.alpha ?? 0;
 
-        if (pictureAlpha <= 0) {
-            this.heroSprite.setVisible(false);
+        if (pictureAlpha <= 0 || (isMarketPicture && t >= SHOTS[2].start)) {
             this.heroShadow.setVisible(false);
             return;
         }
 
-        this.heroSprite.setVisible(true);
         this.heroShadow.setVisible(true);
-        this.heroSprite.setAlpha(pictureAlpha);
-
-        // Facing and origin:
-        // hero_chibi_left_gray_hair.png natively faces LEFT.
-        // Therefore facing 'left' -> flipX = false; facing 'right' -> flipX = true.
-        const facing = this.getHeroFacing(t, pictureKey);
-        const isFacingRight = facing === 'right';
-        this.heroSprite.setFlipX(isFacingRight);
-
-        // Origin at bottom-center of chibi figure
-        this.heroSprite.setOrigin(0.5, 1.0);
-
-        // Scale: standing height is heightSrc * IMG_SCALE world pixels
-        // Chibi texture height is 1804px
-        const standingHeightWorld = entry.heightSrc * IMG_SCALE;
-        const textureHeight = this.heroSprite.height || 1804;
-        const scale = standingHeightWorld / textureHeight;
-        this.heroSprite.setScale(scale);
-
-        if (entry.tint !== undefined) {
-            this.heroSprite.setTint(entry.tint);
-        }
+        const facing = this.placementToolActive && this.placementFacingOverride
+            ? this.placementFacingOverride
+            : this.getHeroFacing(t, pictureKey);
+        this.currentHeroFacing = facing;
 
         // Position feet at (feetX, feetY) with subtle breathing offset
         const feetWorld = toWorld(entry.feetX, entry.feetY);
         const breathe = INTRO_ACTORS.hero.breathe;
         const breatheOffset = breathe ? breathe.px * Math.sin((2 * Math.PI * t) / breathe.period) : 0;
+        const displayedHeight = entry.heightSrc * IMG_SCALE;
 
-        this.heroSprite.setPosition(feetWorld.x, feetWorld.y + breatheOffset);
+        if (isMarketPicture && this.streetHeroImage?.active) {
+            this.streetHeroImage
+                .setVisible(true)
+                .setAlpha(pictureAlpha)
+                .setOrigin(facing === 'right' ? 1 - entry.feetAnchorFracX : entry.feetAnchorFracX, 1)
+                .setFlipX(facing === 'right')
+                .setPosition(feetWorld.x, feetWorld.y + breatheOffset)
+                .setScale(displayedHeight / this.streetHeroImage.height);
+        } else if (isGameplaySprite && this.heroSprite?.active) {
+            this.heroSprite
+                .setVisible(true)
+                .setAlpha(pictureAlpha)
+                .setFlipX(facing === 'right')
+                .setOrigin(0.5, 1.0)
+                .setScale(displayedHeight / (this.heroSprite.height || 1804))
+                .setPosition(feetWorld.x, feetWorld.y + breatheOffset);
+            if (entry.tint !== undefined) {
+                this.heroSprite.setTint(entry.tint);
+            }
+        }
 
         // Soft shadow ellipse under feet
         this.heroShadow.clear();
         const shadowConfig = entry.shadow || { alpha: 0.35, widthRatio: 0.55, heightRatio: 0.12 };
         const shadowAlpha = shadowConfig.alpha * pictureAlpha;
         this.heroShadow.fillStyle(0x000000, shadowAlpha);
-        const sw = standingHeightWorld * (shadowConfig.widthRatio || 0.55);
-        const sh = standingHeightWorld * (shadowConfig.heightRatio || 0.12);
+        const sw = displayedHeight * (shadowConfig.widthRatio || 0.55);
+        const sh = displayedHeight * (shadowConfig.heightRatio || 0.12);
         this.heroShadow.fillEllipse(feetWorld.x, feetWorld.y, sw, sh);
+    }
+
+    updateHeroEyes(t) {
+        const effect = EFFECTS.heroEyes;
+        const entry = INTRO_ACTORS.hero.byImage['intro-2'];
+        const active = effect && entry.eyes && t >= effect.at && t < effect.at + effect.duration &&
+            this.streetHeroImage?.visible && this.streetHeroImage.alpha > 0;
+        if (!active) {
+            this.heroEyeGlow.setVisible(false);
+            return;
+        }
+
+        const displayedHeight = entry.heightSrc * IMG_SCALE;
+        const feet = toWorld(entry.feetX, entry.feetY);
+        const breathe = INTRO_ACTORS.hero.breathe;
+        const breatheOffset = breathe ? breathe.px * Math.sin((2 * Math.PI * t) / breathe.period) : 0;
+        const direction = this.currentHeroFacing === 'right' ? 1 : -1;
+        const eyeX = feet.x + direction * entry.eyes.dx * displayedHeight;
+        const eyeY = feet.y + breatheOffset - entry.eyes.dy * displayedHeight;
+        const progress = (t - effect.at) / effect.duration;
+        const alpha = Math.max(0, 1 - progress);
+
+        this.heroEyeGlow.clear();
+        this.heroEyeGlow.fillStyle(effect.color, alpha);
+        this.heroEyeGlow.fillCircle(eyeX, eyeY, effect.radius * IMG_SCALE);
+        this.heroEyeGlow.setVisible(true);
     }
 
     updatePictures(t) {
@@ -425,58 +452,38 @@ export default class IntroScene extends Scene {
     }
 
     updateCamera(t) {
-        let zoom = 1.0;
-        let camX = 672;
-        let camY = 384;
+        const state = this.getCameraState(t);
+        this.cameras.main.setZoom(state.zoom);
+        this.cameras.main.centerOn(state.centerX, state.centerY);
+    }
 
-        const shot1 = SHOTS[0];
-        const shot2 = SHOTS[1];
-        const shot3 = SHOTS[2];
+    getCameraState(t) {
+        const [village, market, temple] = SHOTS;
+        let zoom;
+        let camX;
+        let camY;
 
-        if (t < shot2.start) {
-            // Shot 1: village camera zoom/focus
-            const shot = shot1;
-            const duration = shot2.start;
-            const p = Math.max(0, Math.min(1, t / duration));
+        if (t < market.start) {
+            const p = Math.max(0, Math.min(1, t / market.start));
             const ep = easeSineInOut(p);
-            zoom = shot.camera.from.zoom + (shot.camera.to.zoom - shot.camera.from.zoom) * ep;
-            camX = shot.camera.from.x + (shot.camera.to.x - shot.camera.from.x) * ep;
-            camY = shot.camera.from.y + (shot.camera.to.y - shot.camera.from.y) * ep;
-        } else if (t < shot3.start) {
-            // Shot 2: market street scene camera scheduled from cameraFrames['intro-2']
-            const config = this.streetCameraConfig;
-            if (config) {
-                let currentZoom = config[config.startFrame || 'A'].zoom;
-                let currentX = config[config.startFrame || 'A'].x;
-                let currentY = config[config.startFrame || 'A'].y;
-
-                for (const move of this.streetCameraMoves) {
-                    if (t < move.startTime) {
-                        currentZoom = move.fromConfig.zoom;
-                        currentX = move.fromConfig.x;
-                        currentY = move.fromConfig.y;
-                        break;
-                    } else if (t <= move.endTime) {
-                        const p = (t - move.startTime) / move.duration;
-                        const ep = easeSineInOut(p);
-                        currentZoom = move.fromConfig.zoom + (move.toConfig.zoom - move.fromConfig.zoom) * ep;
-                        currentX = move.fromConfig.x + (move.toConfig.x - move.fromConfig.x) * ep;
-                        currentY = move.fromConfig.y + (move.toConfig.y - move.fromConfig.y) * ep;
-                        break;
-                    } else {
-                        currentZoom = move.toConfig.zoom;
-                        currentX = move.toConfig.x;
-                        currentY = move.toConfig.y;
-                    }
-                }
-                zoom = currentZoom;
-                camX = currentX;
-                camY = currentY;
+            zoom = village.camera.from.zoom + (village.camera.to.zoom - village.camera.from.zoom) * ep;
+            camX = village.camera.from.x + (village.camera.to.x - village.camera.from.x) * ep;
+            camY = village.camera.from.y + (village.camera.to.y - village.camera.from.y) * ep;
+        } else if (t < market.end) {
+            const [settle, hold] = market.camera;
+            if (t < settle.to) {
+                const p = Math.max(0, Math.min(1, (t - settle.from) / (settle.to - settle.from)));
+                const ep = easeSineInOut(p);
+                zoom = village.camera.to.zoom + (settle.zoom - village.camera.to.zoom) * ep;
+                camX = village.camera.to.x + (settle.x - village.camera.to.x) * ep;
+                camY = village.camera.to.y + (settle.y - village.camera.to.y) * ep;
+            } else {
+                zoom = hold.zoom;
+                camX = hold.x;
+                camY = hold.y;
             }
         } else {
-            // Shot 3: temple camera
-            const shot = shot3;
-            const cam = shot.camera;
+            const cam = temple.camera;
             if (t <= cam.startAt) {
                 zoom = cam.from.zoom;
                 camX = cam.from.x;
@@ -494,9 +501,18 @@ export default class IntroScene extends Scene {
             }
         }
 
-        const worldPos = toWorld(camX, camY);
-        this.cameras.main.setZoom(zoom);
-        this.cameras.main.centerOn(worldPos.x, worldPos.y);
+        const center = toWorld(camX, camY);
+        const viewWidth = this.cameras.main.width / zoom;
+        const viewHeight = this.cameras.main.height / zoom;
+        const centerX = Math.max(viewWidth / 2, Math.min(WORLD.width - viewWidth / 2, center.x));
+        const centerY = Math.max(viewHeight / 2, Math.min(WORLD.height - viewHeight / 2, center.y));
+        return {
+            zoom,
+            centerX,
+            centerY,
+            viewX: centerX - viewWidth / 2,
+            viewY: centerY - viewHeight / 2,
+        };
     }
 
     updateLetterbox(t) {
@@ -508,8 +524,8 @@ export default class IntroScene extends Scene {
         this.letterbox.setTimelineProgress('in', progress);
     }
 
-    getScreenAnchor(cue) {
-        const pictureKey = this.getCurrentPictureKey();
+    getScreenAnchor(cue, atTime = this.t) {
+        const pictureKey = cue.shot === 'market' ? 'intro-2' : cue.shot === 'temple' ? 'intro-3' : 'intro-1';
         const speakerUpper = (cue.speaker || '').toUpperCase().trim();
 
         let canonical = speakerUpper;
@@ -526,7 +542,7 @@ export default class IntroScene extends Scene {
             if (!entry) return null;
             const headTopOffset = INTRO_ACTORS.hero.headTopOffsetSrc || 8;
             const breathe = INTRO_ACTORS.hero.breathe;
-            const breatheOffset = breathe ? breathe.px * Math.sin((2 * Math.PI * this.t) / breathe.period) : 0;
+            const breatheOffset = breathe ? breathe.px * Math.sin((2 * Math.PI * atTime) / breathe.period) : 0;
             anchorWorld = toWorld(entry.feetX, entry.feetY - entry.heightSrc - headTopOffset);
             anchorWorld.y += breatheOffset;
         } else {
@@ -536,23 +552,16 @@ export default class IntroScene extends Scene {
             anchorWorld = toWorld(anchorSrc.x, anchorSrc.y);
         }
 
-        const cam = this.cameras.main;
-        const zoom = cam.zoom;
-        const vwx = cam.worldView && cam.worldView.width > 0
-            ? cam.worldView.x
-            : (cam.midPoint.x - (cam.width / zoom) / 2);
-        const vwy = cam.worldView && cam.worldView.height > 0
-            ? cam.worldView.y
-            : (cam.midPoint.y - (cam.height / zoom) / 2);
+        const cameraState = this.getCameraState(atTime);
 
         return {
-            x: (anchorWorld.x - vwx) * zoom,
-            y: (anchorWorld.y - vwy) * zoom,
+            x: (anchorWorld.x - cameraState.viewX) * cameraState.zoom,
+            y: (anchorWorld.y - cameraState.viewY) * cameraState.zoom,
+            zoom: cameraState.zoom,
         };
     }
 
     updateDialogueAndBubbles(t) {
-        // Find active and overlapping fading cues
         const activeCues = DIALOGUE.filter((cue) => t >= cue.start && t < cue.end);
 
         // Track cues being handled by speech bubbles
@@ -588,6 +597,26 @@ export default class IntroScene extends Scene {
                 if (freeBubble) {
                     freeBubble.start(cue, this.precomputedCues[cue.id]);
                     freeBubble.update(t, anchor.x, anchor.y);
+                    if (INTRO_DEBUG.enabled && import.meta.env.DEV && !this.loggedBubbleCueIds.has(cue.id)) {
+                        const startAnchor = this.getScreenAnchor(cue, cue.start);
+                        const startLayout = startAnchor
+                            ? freeBubble.update(cue.start, startAnchor.x, startAnchor.y, startAnchor.zoom)
+                            : null;
+                        if (startAnchor && startLayout) {
+                            const facing = cue.shot === 'market'
+                                ? this.getHeroFacing(cue.start, 'intro-2')
+                                : this.getHeroFacing(cue.start, cue.shot === 'temple' ? 'intro-3' : 'intro-1');
+                            console.log(
+                                `[bubble] id=${cue.id} speaker=${cue.speaker} ` +
+                                `anchorScreen=(${startAnchor.x.toFixed(1)},${startAnchor.y.toFixed(1)}) ` +
+                                `zoom=${startAnchor.zoom.toFixed(2)} scale=${startLayout.scale.toFixed(2)} ` +
+                                `panel=${startLayout.width.toFixed(1)}x${startLayout.height.toFixed(1)} ` +
+                                `clamped=${startLayout.clamped} flipped=${startLayout.flipped} facing=${facing}`
+                            );
+                        }
+                        this.loggedBubbleCueIds.add(cue.id);
+                        freeBubble.update(t, anchor.x, anchor.y);
+                    }
                 }
             }
         });
@@ -656,18 +685,26 @@ export default class IntroScene extends Scene {
         }
 
         this.updatePictures(this.t);
-        this.updateHero(this.t);
         this.updateCamera(this.t);
+        this.updateSwing(this.t);
+        this.updateHero(this.t);
+        this.updateHeroEyes(this.t);
         this.updateLetterbox(this.t);
         this.updateDialogueAndBubbles(this.t);
         this.updateSkipButton(this.t);
+
+        if (this.finalDialogueCue && this.t >= this.finalDialogueCompleteAt) {
+            this.finish(1.0);
+        }
     }
 
-    finish() {
+    finish(fadeOutSeconds = INTRO_FLOW.skip?.fadeOut ?? 0.4) {
         if (this.isFinishing) {
             return;
         }
         this.isFinishing = true;
+
+        this.sound.stopAll();
 
         if (this.dialogueBox) {
             this.dialogueBox.hide();
@@ -678,7 +715,7 @@ export default class IntroScene extends Scene {
 
         this.registry.set(INTRO_FLOW.registryFlag || 'introSeen', true);
 
-        const fadeOutDuration = (INTRO_FLOW.skip?.fadeOut || 0.4) * 1000;
+        const fadeOutDuration = fadeOutSeconds * 1000;
         this.cameras.main.once('camerafadeoutcomplete', () => {
             if (!this.sys.isActive()) {
                 return;
@@ -710,11 +747,20 @@ export default class IntroScene extends Scene {
         if (this.bubblePool) {
             this.bubblePool.forEach((b) => b.destroy());
         }
+        if (this.swingSprite && this.swingSprite.active) {
+            this.swingSprite.destroy();
+        }
+        if (this.streetHeroImage && this.streetHeroImage.active) {
+            this.streetHeroImage.destroy();
+        }
         if (this.heroSprite && this.heroSprite.active) {
             this.heroSprite.destroy();
         }
         if (this.heroShadow && this.heroShadow.active) {
             this.heroShadow.destroy();
+        }
+        if (this.heroEyeGlow && this.heroEyeGlow.active) {
+            this.heroEyeGlow.destroy();
         }
     }
 }

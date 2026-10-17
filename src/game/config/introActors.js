@@ -5,17 +5,26 @@
 
 export const INTRO_ACTORS = {
   hero: {
-    // Pose: use the SAME standing/idle pose the Player shows (read Player.js, do not edit it), via showFrame().
     byImage: {
-      // Street scene: cobblestone path, centre foreground.
-      'intro-2': { feetX: 725, feetY: 664, heightSrc: 128, facing: 'left',  tint: 0xffe2c4, shadow: { alpha: 0.35, widthRatio: 0.55, heightRatio: 0.12 } },
-      // Temple hill: on the winding path below the castle gate.
-      'intro-3': { feetX: 843, feetY: 440, heightSrc: 62,  facing: 'right', tint: 0xe9c9b8, shadow: { alpha: 0.30, widthRatio: 0.55, heightRatio: 0.12 } },
+      // STREET SCENE ('intro-2'): the hero is the hand-drawn chibi picture (assets/intro/hero-intro2.png, 124x256, natively
+      // facing LEFT, feet at the bottom edge, feet anchor at 45% of the width). Facing right = flipX about the feet point.
+      // Camera is static on the full picture, so these are fixed screen-ish sizes: feet on the cobblestone path in the centre.
+      'intro-2': {
+        kind: 'image', texture: 'hero-intro2', file: 'assets/intro/hero-intro2.png',
+        nativeFacing: 'left', feetAnchorFracX: 0.449,
+        feetX: 725, feetY: 650, heightSrc: 124,
+        initialFacing: 'right',
+        // Facing is decided by WHO IS SPEAKING, changing instantly (no tween) at the cue start. HERO cues keep the current facing.
+        facingBySpeaker: { CUSTOMER: 'right', SHOPKEEPER: 'right', MOTHER: 'left' },
+        tint: 0xffe2c4, shadow: { alpha: 0.35, widthRatio: 0.55, heightRatio: 0.12 },
+        eyes: { dx: 0.061, dy: 0.702, count: 1 },    // single visible eye (side view): fraction of height; dx toward facing
+      },
+      // TEMPLE HILL ('intro-3'): unchanged, the gameplay sprite standing on the path below the castle.
+      'intro-3': { kind: 'sprite', feetX: 843, feetY: 440, heightSrc: 62, facing: 'right', tint: 0xe9c9b8, shadow: { alpha: 0.30, widthRatio: 0.55, heightRatio: 0.12 } },
     },
     fadeWithPicture: true,      // hero alpha = alpha of that shot's picture (crossfades together)
     breathe: { px: 1, period: 3.2 },   // vertical idle sway driven by the master clock (not a tween)
     headTopOffsetSrc: 8,        // bubble tail points this far above the head top
-    eyes: { dx: 0.07, dy: 0.86 },      // eye position as a fraction of height: dx toward facing, dy above feet
   },
 
   // Head-top points (where a bubble's tail points) for painted characters. HERO is computed from the sprite.
@@ -32,26 +41,23 @@ export const INTRO_ACTORS = {
   speakerAliases: { MOM: 'MOTHER', MA: 'MOTHER', SHOP: 'SHOPKEEPER', 'SHOP KEEPER': 'SHOPKEEPER', BUYER: 'CUSTOMER' },
 
   bubble: {
-    showName: false,   // no speaker-name heading: only dialogue text inside the box
-    fontSize: 14, padding: 10, maxWidth: 210, tailPx: 9, borderPx: 2,
+    showName: false,   // no speaker-name heading: just the bubble on the character
+    // Base layout (designed for zoom = zoomScale.ref). The whole bubble (panel + text + tail) is built ONCE per cue at this
+    // base size and then scaled as one unit every frame by the camera zoom, so wrapping never changes while zooming.
+    fontSize: 12, padding: 7, maxWidth: 170, tailPx: 7, borderPx: 2,
     panelColor: 0x120f1a, panelAlpha: 0.9, textColor: '#f2ecff',
-    // Scale container smoothly: zoomS = clamp(cam.zoom / 1.8, 0.65, 0.95)
-    zoomScale: { ref: 1.8, min: 0.65, max: 0.95 },
-    // Cap maximum bubble dimensions to 25% screen width and 20% screen height
-    fit: { maxWidthFrac: 0.25, maxHeightFrac: 0.20, minFontPx: 10 },
-    fadeIn: 0.30, fadeOut: 0.35, safeMargin: 20, pool: 2,
+    // scale = clamp(cameraZoom / ref, min, max): zoomed out -> smaller bubble, zoomed in -> grows only up to max.
+    zoomScale: { ref: 1.0, min: 0.8, max: 1.15 },
+    // Hard fit rules in screen space (applied after the zoom scale): the scaled panel must never exceed these
+    // fractions of the screen; if it would, reduce the scale further (never below minFontPx effective font size).
+    fit: { maxWidthFrac: 0.18, maxHeightFrac: 0.13, minFontPx: 10 },
+    fadeIn: 0.30, fadeOut: 0.35, safeMargin: 24, pool: 2,
   },
 
-  // Street scene camera plan: Frame A (905, 520, z: 1.95), Frame B (440, 535, z: 1.75).
-  // Arrives 0.3s before Mother begins her line over 1.2s pan.
-  cameraFrames: {
-    'intro-2': {
-      A: { x: 905, y: 520, zoom: 1.95 },
-      B: { x: 440, y: 535, zoom: 1.75 },
-      moveSeconds: 1.2, arriveBeforeCueStart: 0.3, startFrame: 'A',
-    },
-  },
+  // NOTE: the street-scene camera is STATIC on the full picture (see introData.js SHOTS[market].camera).
+  // There is no cue-based camera scheduler. Every bubble sits on its speaker's head in the full view.
 
-  // Calm dialogue pacing: 75ms per character, 180ms on commas, 350ms on periods/exclamations
-  pacing: { msPerChar: 75, pauseComma: 180, pauseStop: 350, maxFractionOfCue: 0.85 },
+  // Slow, calm delivery. introData.js cues are sized for this pacing (typing <= ~80% of each cue), so no line
+  // should need scaling. If one does, report it instead of silently speeding it up.
+  pacing: { msPerChar: 55, pauseComma: 200, pauseStop: 400, maxFractionOfCue: 0.88 },
 };

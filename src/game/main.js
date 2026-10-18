@@ -8,9 +8,9 @@ import DarkWorldScene from './scenes/DarkWorldScene';
 import DarknessScene from './scenes/DarknessScene';
 import HauntedCorridorScene from './scenes/HauntedCorridorScene';
 import SettlementScene from './scenes/SettlementScene';
-import TimeApproachScene from './scenes/TimeApproachScene';
-import TimeChamberScene from './scenes/TimeChamberScene';
-import MinaAfterTimeScene from './scenes/MinaAfterTimeScene';
+import ClockTowerScene from './scenes/ClockTowerScene';
+import EndlessRoomScene from './scenes/EndlessRoomScene';
+import AfterTimeScene from './scenes/AfterTimeScene';
 
 const config = {
     type: AUTO,
@@ -39,9 +39,9 @@ const config = {
         DarknessScene,
         HauntedCorridorScene,
         SettlementScene,
-        TimeApproachScene,
-        TimeChamberScene,
-        MinaAfterTimeScene,
+        ClockTowerScene,
+        EndlessRoomScene,
+        AfterTimeScene,
     ],
 };
 

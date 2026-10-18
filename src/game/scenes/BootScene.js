@@ -5,7 +5,12 @@ import { preloadIntroImages } from '../config/introData';
 import { DARKWORLD_BG, MINA_SHEETS } from '../config/actTwoData';
 import { CORRIDOR, ORB_FEAR, STALKER_SHEETS } from '../config/actThreeData';
 import { CRAWLER as LIFE_CRAWLER, LIFE_ASSETS } from '../config/lifeData';
-import { TIME_ASSETS, TIME_SCENE_KEYS } from '../config/timeData';
+import {
+    preloadTimeAssets,
+    TIME_ASSETS,
+    TIME_DEBUG,
+    TIME_FLOW,
+} from '../config/timeData';
 
 export default class BootScene extends Scene {
     constructor() {
@@ -103,11 +108,16 @@ export default class BootScene extends Scene {
             startFrame: 0,
             endFrame: LIFE_ASSETS.reveal.frames - 1,
         });
-        this.load.image(
-            TIME_ASSETS.BG_IMAGE.key,
-            TIME_ASSETS.BG_IMAGE.path.replace(/\.jpg$/i, '.jpeg')
-        );
-        this.load.image(TIME_ASSETS.HOURGLASS_STATIC.key, TIME_ASSETS.HOURGLASS_STATIC.path);
+        this.timeEndlessAvailable = true;
+        const onTimeAssetError = (file) => {
+            if (file && file.key === 'time-endless') {
+                this.timeEndlessAvailable = false;
+                console.warn('[BootScene] Optional Time room art is missing; EndlessRoomScene will draw it.');
+            }
+        };
+        this.load.on('loaderror', onTimeAssetError);
+        this.load.once('complete', () => this.load.off('loaderror', onTimeAssetError));
+        preloadTimeAssets(this);
         this.load.image('bg-menu', 'assets/backgrounds/menu.jpg');
         this.load.image('bg-temple', 'assets/backgrounds/temple.jpg');
         this.load.image('bg-arena', 'assets/backgrounds/arena.jpg');
@@ -140,8 +150,10 @@ export default class BootScene extends Scene {
             LIFE_ASSETS.crawler.attackRight.key,
             LIFE_ASSETS.crawler.attackLeft.key,
             LIFE_ASSETS.reveal.key,
-            TIME_ASSETS.BG_IMAGE.key,
-            TIME_ASSETS.HOURGLASS_STATIC.key,
+            ...Object.keys(TIME_ASSETS.images),
+            ...Object.keys(TIME_ASSETS.optionalImages),
+            ...TIME_ASSETS.chamberSheets.map((sheet) => sheet.key),
+            TIME_ASSETS.orb.key,
         ].forEach((textureKey) => {
             if (this.textures.exists(textureKey)) {
                 this.textures.get(textureKey).setFilter(Textures.FilterMode.NEAREST);
@@ -220,19 +232,28 @@ export default class BootScene extends Scene {
                 repeat: 0,
             });
         }
+        if (this.textures.exists('time-orb') && !this.anims.exists('time-orb-pulse')) {
+            this.anims.create({
+                key: 'time-orb-pulse',
+                frames: this.anims.generateFrameNumbers('time-orb', {
+                    start: 0,
+                    end: 15,
+                }),
+                frameRate: 1000 / 80,
+                repeat: -1,
+            });
+        }
         const requestedScene = typeof window !== 'undefined'
             ? new URLSearchParams(window.location.search).get('scene')
             : null;
         const debugGrid = typeof window !== 'undefined' &&
             new URLSearchParams(window.location.search).get('debug') === 'grid';
-        const timeSceneRoutes = {
-            TimeApproach: TIME_SCENE_KEYS.TIME_APPROACH,
-            TimeChamber: TIME_SCENE_KEYS.TIME_CHAMBER,
-            MinaAfterTime: TIME_SCENE_KEYS.MINA_AFTER_TIME,
-        };
-        if (import.meta.env.DEV && timeSceneRoutes[requestedScene]) {
+        if (import.meta.env.DEV && TIME_DEBUG && TIME_FLOW.devRoutes[requestedScene]) {
             if (this.registry.get('orbs') == null) this.registry.set('orbs', ['fear']);
-            this.scene.start(timeSceneRoutes[requestedScene]);
+            this.scene.start(
+                TIME_FLOW.devRoutes[requestedScene],
+                { startChamber: requestedScene === 'TimeChamber' }
+            );
             return;
         }
         if (import.meta.env.DEV &&

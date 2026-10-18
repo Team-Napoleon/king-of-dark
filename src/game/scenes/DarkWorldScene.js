@@ -14,8 +14,7 @@ import {
     MINA_SHEETS,
 } from '../config/actTwoData';
 import { ACT3_PACING, ACT3_SPEAKERS } from '../config/actThreeData';
-import { AFTER_FEAR_TO_LIFE } from '../config/lifeData';
-import { TIME_SCENE_KEYS } from '../config/timeData';
+import { SCENE9_TIME_LINES, TIME_FLOW } from '../config/timeData';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -118,22 +117,29 @@ export default class DarkWorldScene extends Scene {
             this.part === 'village'
                 ? ACT2_VILLAGE_BEATS
                 : this.part === 'afterFear'
-                    ? [
-                        { id: 'after-fear-fade-in', type: 'fx', name: 'fadeIn' },
-                        ...AFTER_FEAR_TO_LIFE.map((beat, index) => ({
-                            ...beat,
-                            id: `after-fear-${index}`,
-                            type: beat.t,
-                            scene: beat.t === 'goto' ? TIME_SCENE_KEYS.TIME_APPROACH : beat.scene,
-                            gesture: beat.who === 'MINA' && beat.text.startsWith('Next is Life.') ? 'point' : beat.gesture,
-                        })),
-                    ]
+                    ? this.createAfterFearBeats()
                     : ACT2_FEAR_OUTSIDE_BEATS,
             this.createHandlers()
         ).start();
         this.elapsed = 0;
         this.transitionStarted = false;
         this.events.once('shutdown', () => this.cleanup());
+    }
+
+    createAfterFearBeats() {
+        return [
+            { id: 'after-fear-fade-in', type: 'fx', name: 'fadeIn' },
+            { id: 'after-fear-face', type: 'faceEachOther' },
+            ...SCENE9_TIME_LINES.map((line, index) => ({
+                id: `after-fear-line-${index}`,
+                type: 'line',
+                ...line,
+                gesture: line.who === 'MINA' && index === SCENE9_TIME_LINES.length - 1 ? 'point' : undefined,
+            })),
+            { id: 'after-fear-objective', type: 'objective', text: TIME_FLOW.objectiveTime },
+            { id: 'after-fear-lead', type: 'fx', name: 'minaLeads' },
+            { id: 'after-fear-go', type: 'goto', scene: TIME_FLOW.tower },
+        ];
     }
 
     createSwing() {

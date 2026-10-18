@@ -199,7 +199,7 @@ export default class BootScene extends Scene {
         });
         LIFE_ASSETS.npc.rows_order.forEach((row, rowIndex) => {
             const key = `life-npc-${row}-idle`;
-            if (!this.anims.exists(key)) {
+            if (this.textures.exists(LIFE_ASSETS.npc.key) && !this.anims.exists(key)) {
                 this.anims.create({
                     key,
                     frames: [
@@ -218,7 +218,7 @@ export default class BootScene extends Scene {
             [LIFE_ASSETS.crawler.attackLeft.key, 'attack-left', LIFE_CRAWLER.attackFps],
         ].forEach(([textureKey, suffix, frameRate]) => {
             const key = `life-crawler-${suffix}`;
-            if (!this.anims.exists(key)) {
+            if (this.textures.exists(textureKey) && !this.anims.exists(key)) {
                 this.anims.create({
                     key,
                     frames: this.anims.generateFrameNumbers(textureKey, {
@@ -230,7 +230,7 @@ export default class BootScene extends Scene {
                 });
             }
         });
-        if (!this.anims.exists('life-hatch')) {
+        if (this.textures.exists(LIFE_ASSETS.reveal.key) && !this.anims.exists('life-hatch')) {
             this.anims.create({
                 key: 'life-hatch',
                 frames: this.anims.generateFrameNumbers(LIFE_ASSETS.reveal.key, {
@@ -275,6 +275,14 @@ export default class BootScene extends Scene {
             this.scene.start('LifeChamberScene', {
                 waveOnly: requestedScene === 'LifeChamberWave',
             });
+            return;
+        }
+        if (import.meta.env.DEV && requestedScene === 'MinaAfterLife') {
+            const currentOrbs = this.registry.get('orbs');
+            if (!Array.isArray(currentOrbs) || currentOrbs.length < 3) {
+                this.registry.set('orbs', ['fear', 'time', 'life']);
+            }
+            this.scene.start('AfterLifeScene');
             return;
         }
         if (import.meta.env.DEV && TIME_DEBUG && TIME_FLOW.devRoutes[requestedScene]) {

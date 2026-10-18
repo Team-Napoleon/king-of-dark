@@ -242,7 +242,7 @@ export default class Crawler {
         const move = moveForDamage(amount);
         this.health = Math.max(0, this.health - 1 / CRAWLER.hitsToKill[move]);
         if (this.health <= 0) {
-            this.isDefeated = true;
+            this.isDefeated = false;
             this.untargetable = true;
             this.state = 'dying';
             this.stateElapsed = 0;

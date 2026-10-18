@@ -6,7 +6,9 @@ import PlayerHud from '../ui/PlayerHud';
 import WorldBubble from '../ui/WorldBubble';
 import { ACT3_PACING, ACT3_SPEAKERS } from '../config/actThreeData';
 import { CHAMBER, CHAMBER_BEATS, CRAWLER, LIFE_ASSETS, LIFE_FAIL, WAVES } from '../config/lifeData';
-import { HERO_PHYSICS, HERO_STAND_PX } from '../config/animationData';
+import { DEBUG_KEYS, HERO_MOVES, HERO_PHYSICS, HERO_STAND_PX } from '../config/animationData';
+import { LIFE_FLOW } from '../config/lifeAfterData';
+import { TIME_DEBUG } from '../config/timeData';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -35,6 +37,7 @@ export default class LifeChamberScene extends Scene {
         this.worldHeight = LIFE_ASSETS.insideBg.h * this.bgScale;
         this.floorY = CHAMBER.floorFeetY * this.bgScale;
         this.transitionStarted = false;
+        this.handoffStarted = false;
         this.sceneElapsed = 0;
         this.waveElapsed = 0;
         this.waveKills = 0;
@@ -45,6 +48,13 @@ export default class LifeChamberScene extends Scene {
         this.waveFailFadingIn = false;
         this.lightElapsed = 0;
         this.ringGlowLevel = CHAMBER.ringGlow.levelStart;
+        this.orbCount = -1;
+        this.hudOrbPulse = -1;
+        this.absorbFlashElapsed = -1;
+        this.lifeHudColor = `#${LIFE_ASSETS.orb.hudColor.toString(16).padStart(6, '0')}`;
+        this.debugKeysEnabled = import.meta.env.DEV && (TIME_DEBUG || DEBUG_KEYS);
+        this.debugGrid = import.meta.env.DEV && typeof window !== 'undefined' &&
+            new URLSearchParams(window.location.search).get('debug') === 'grid';
 
         this.cameras.main.resetFX();
         this.cameras.main.setRoundPixels(true);
@@ -111,12 +121,26 @@ export default class LifeChamberScene extends Scene {
         this.fadeOverlay = this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x000000, 1)
             .setScrollFactor(0)
             .setDepth(150);
+        if (this.waveOnly) this.fadeOverlay.setAlpha(0).setVisible(false);
         this.ringX = CHAMBER.landmarks.ring.x * this.bgScale;
         this.ringY = CHAMBER.landmarks.ring.y * this.bgScale;
         this.createChamberLighting();
+        this.createOrbEffects();
         this.restartKey = this.input.keyboard.addKey('R');
+        if (this.debugKeysEnabled) {
+            this.input.keyboard.addCapture('F5');
+            this.killWaveKey = this.input.keyboard.addKey('F5');
+        }
         this.createBubble();
-        this.cameras.main.setScroll(0, 0);
+        const desiredScrollY = this.floorY - HEIGHT * 0.78;
+        const cameraScrollY = Math.max(0, Math.min(this.worldHeight - HEIGHT, desiredScrollY));
+        this.cameraTarget = this.add.zone(
+            this.player.sprite.body.center.x,
+            cameraScrollY + HEIGHT / 2,
+            1,
+            1
+        );
+        this.cameras.main.startFollow(this.cameraTarget, true, 0.12, 0);
 
         const beats = this.waveOnly
             ? [{ id: 'wave', type: 'wave', idData: 'chamber' }]
@@ -138,6 +162,7 @@ export default class LifeChamberScene extends Scene {
 
         this.sceneElapsed += delta / 1000;
         this.player.update(delta);
+        this.cameraTarget.setX(this.player.sprite.body.center.x);
         this.updateChamberLighting(delta);
         this.updateWave(delta);
         this.updateCrawlerPuffs(delta);
@@ -145,6 +170,7 @@ export default class LifeChamberScene extends Scene {
         this.updateRingLevel(delta);
         this.hud.update(delta);
         this.updateOrbHud();
+        this.updateOrbEffects(delta);
         this.bubble.update(delta / 1000);
 
         if (this.walkingIn) {
@@ -167,6 +193,15 @@ export default class LifeChamberScene extends Scene {
         if (Input.Keyboard.JustDown(this.restartKey)) {
             this.scene.restart({ waveOnly: this.waveOnly });
             return;
+        }
+        if (this.killWaveKey && Input.Keyboard.JustDown(this.killWaveKey)) {
+            for (const crawler of this.wavePool) {
+                if (!crawler.inUse || crawler.state === 'dying') continue;
+                crawler.untargetable = false;
+                for (let hit = 0; hit < CRAWLER.hitsToKill.punch; hit += 1) {
+                    crawler.applyDamage(HERO_MOVES.punch.damage, this.player.sprite.body.center.x);
+                }
+            }
         }
         this.runner.update(delta / 1000);
     }
@@ -215,7 +250,19 @@ export default class LifeChamberScene extends Scene {
                 update: () => !this.waveRunning && this.waveFinished,
             },
             goto: {
-                start: () => ({ done: true }),
+                start: (beat) => {
+                    if (this.handoffStarted) return { done: true };
+                    this.handoffStarted = true;
+                    this.transitionStarted = true;
+                    this.bubble.clear();
+                    const sceneKey = beat.scene || LIFE_FLOW.after;
+                    if (this.game.scene.keys[sceneKey]) this.scene.start(sceneKey);
+                    else {
+                        console.warn(`[LifeChamberScene] Scene "${sceneKey}" is not registered; returning to MainMenuScene.`);
+                        this.scene.start(LIFE_FLOW.nextFallback);
+                    }
+                    return { done: true };
+                },
                 update: (_dt, state) => state.done,
             },
         };
@@ -226,6 +273,45 @@ export default class LifeChamberScene extends Scene {
         if (name === 'heroWalksIn') {
             const distance = this.walkTargetX - this.player.sprite.body.center.x;
             return { name, elapsed: 0, duration: Math.max(0, distance / HERO_PHYSICS.moveSpeed) };
+        }
+        if (name === 'orbRises') {
+            this.ringGlowLevel = CHAMBER.ringGlow.levelEnd;
+            this.fireLevelTarget = CHAMBER.ringGlow.levelEnd;
+            this.orb.setPosition(this.ringX, this.ringY).setVisible(true).setAlpha(1).setScale(this.orbBaseScale);
+            this.orbGlow.setPosition(this.ringX, this.ringY).setScale(1).setAlpha(0.3).setVisible(true);
+            if (this.textures.exists(LIFE_ASSETS.orb.key) && this.anims.exists(LIFE_ASSETS.orb.anim)) {
+                this.orb.play(LIFE_ASSETS.orb.anim, true);
+            }
+            this.cameras.main.shake(180, 0.0035);
+            return { name, elapsed: 0, duration: CHAMBER.orbRise.riseSeconds };
+        }
+        if (name === 'orbToHero') {
+            this.orbStartX = this.orb.x;
+            this.orbStartY = this.orb.y;
+            this.orbStartScale = this.orb.scaleX;
+            return { name, elapsed: 0, duration: CHAMBER.orbRise.floatToHeroSeconds };
+        }
+        if (name === 'bannerOrb') {
+            this.bannerTitle.setText(beat.text || 'ORB OF LIFE');
+            this.bannerSub.setText(beat.sub || 'Life holds on.');
+            this.bannerBack.setVisible(true).setAlpha(0);
+            this.bannerTitle.setVisible(true).setAlpha(0);
+            this.bannerSub.setVisible(true).setAlpha(0);
+            return { name, elapsed: 0, duration: 2.2 };
+        }
+        if (name === 'orbCollected') {
+            const current = this.registry.get('orbs');
+            const orbs = Array.isArray(current) ? current : [];
+            const orbId = beat.orb || LIFE_FLOW.orbId;
+            if (!orbs.includes(orbId)) this.registry.set('orbs', [...orbs, orbId]);
+            this.updateOrbHud(true);
+            this.hudOrbPulse = 0;
+            return { name, elapsed: 0, duration: 0.4 };
+        }
+        if (name === 'fadeOut') {
+            this.player.controlsLocked = true;
+            this.fadeOverlay.setVisible(true).setAlpha(0);
+            return { name, elapsed: 0, duration: beat.seconds || 1 };
         }
         return { name, elapsed: 0, duration: 0 };
     }
@@ -243,6 +329,53 @@ export default class LifeChamberScene extends Scene {
             this.positionHeroAtStop();
             this.walkingIn = false;
             return true;
+        }
+        if (name === 'orbRises') {
+            const progress = Math.min(1, state.elapsed / state.duration);
+            const rise = CHAMBER.orbRise.riseArt * this.bgScale * progress;
+            const pulse = 0.78 + 0.22 * Math.sin(this.sceneElapsed * Math.PI * 2 / LIFE_ASSETS.orb.glow.pulseSeconds);
+            this.orb.setPosition(this.ringX, this.ringY - rise);
+            this.orbGlow.setPosition(this.orb.x, this.orb.y).setAlpha(0.24 + 0.12 * pulse);
+            return state.elapsed >= state.duration;
+        }
+        if (name === 'orbToHero') {
+            const progress = Math.min(1, state.elapsed / state.duration);
+            const heroX = this.player.sprite.body.center.x;
+            const heroY = this.player.sprite.body.bottom - HERO_STAND_PX * 0.55;
+            const targetScale = this.orbHeldScale;
+            const bob = Math.sin(state.elapsed * Math.PI * 2 * CHAMBER.orbRise.bobHz) *
+                CHAMBER.orbRise.bobArt * this.bgScale * (1 - progress);
+            this.orb.setPosition(
+                this.orbStartX + (heroX - this.orbStartX) * progress,
+                this.orbStartY + (heroY - this.orbStartY) * progress + bob
+            ).setScale(this.orbStartScale + (targetScale - this.orbStartScale) * progress);
+            this.orbGlow.setPosition(this.orb.x, this.orb.y).setScale(1 - progress * 0.55);
+            if (progress >= 1) {
+                this.orb.setVisible(false);
+                this.orbGlow.setVisible(false);
+                this.orbFlash.setAlpha(0.85);
+                this.absorbFlashElapsed = 0;
+                return true;
+            }
+            return false;
+        }
+        if (name === 'bannerOrb') {
+            const alpha = Math.min(1, state.elapsed / 0.35);
+            this.bannerBack.setAlpha(alpha);
+            this.bannerTitle.setAlpha(alpha);
+            this.bannerSub.setAlpha(alpha);
+            if (state.elapsed >= state.duration) {
+                this.bannerBack.setVisible(false);
+                this.bannerTitle.setVisible(false);
+                this.bannerSub.setVisible(false);
+                return true;
+            }
+            return false;
+        }
+        if (name === 'orbCollected') return state.elapsed >= state.duration;
+        if (name === 'fadeOut') {
+            this.fadeOverlay.setAlpha(Math.min(1, state.elapsed / state.duration));
+            return state.elapsed >= state.duration;
         }
         return true;
     }
@@ -415,10 +548,32 @@ export default class LifeChamberScene extends Scene {
         }
     }
 
-    updateOrbHud() {
+    updateOrbHud(force = false) {
         const orbs = this.registry.get('orbs');
         const count = Array.isArray(orbs) ? orbs.length : 0;
-        this.orbText.setText(`ORBS ${count}/5`);
+        if (force || count !== this.orbCount) {
+            this.orbCount = count;
+            this.orbText.setText(`ORBS ${count}/5`);
+        }
+        if (this.hudOrbPulse < 0) this.orbText.setColor(this.lifeHudColor).setAlpha(1);
+    }
+
+    updateOrbEffects(delta) {
+        if (this.absorbFlashElapsed >= 0) {
+            this.absorbFlashElapsed += delta / 1000;
+            this.orbFlash.setAlpha(0.85 * Math.max(0,
+                1 - this.absorbFlashElapsed / CHAMBER.orbRise.absorbFlashSeconds));
+            if (this.absorbFlashElapsed >= CHAMBER.orbRise.absorbFlashSeconds) {
+                this.absorbFlashElapsed = -1;
+                this.orbFlash.setAlpha(0);
+            }
+        }
+        if (this.hudOrbPulse >= 0) {
+            this.hudOrbPulse += delta / 1000;
+            this.orbText.setColor(this.lifeHudColor)
+                .setAlpha(0.6 + 0.4 * Math.max(0, 1 - this.hudOrbPulse / 1.2));
+            if (this.hudOrbPulse >= 1.2) this.hudOrbPulse = -1;
+        }
     }
 
     createGrid() {
@@ -461,12 +616,50 @@ export default class LifeChamberScene extends Scene {
         this.orbText = this.add.text(WIDTH - 24, 24, '', {
             fontFamily: 'Arial Black',
             fontSize: '22px',
-            color: '#ff4fb0',
+            color: `#${LIFE_ASSETS.orb.hudColor.toString(16).padStart(6, '0')}`,
             stroke: '#08070d',
             strokeThickness: 4,
         }).setOrigin(1, 0).setScrollFactor(0).setDepth(110);
         this.updateOrbHud();
         this.updateChamberLighting(0);
+    }
+
+    createOrbEffects() {
+        const displayDiameter = HERO_STAND_PX * 0.45;
+        this.lifeHudColor = `#${LIFE_ASSETS.orb.hudColor.toString(16).padStart(6, '0')}`;
+        this.orb = this.textures.exists(LIFE_ASSETS.orb.key)
+            ? this.add.sprite(0, 0, LIFE_ASSETS.orb.key, 0)
+                .setOrigin(0.5)
+                .setScale(displayDiameter / LIFE_ASSETS.orb.bodyDiameter)
+            : this.add.ellipse(0, 0, displayDiameter, displayDiameter, LIFE_ASSETS.orb.hudColor, 0.95);
+        if (!this.textures.exists(LIFE_ASSETS.orb.key)) {
+            console.warn('[LifeChamberScene] Orb sprite is missing; using a pink placeholder.');
+        }
+        this.orb.setDepth(12).setVisible(false);
+        this.orbBaseScale = this.orb.scaleX;
+        this.orbHeldScale = this.orb.type === 'Sprite'
+            ? HERO_STAND_PX * CHAMBER.orbRise.heldWidthH / LIFE_ASSETS.orb.bodyDiameter
+            : CHAMBER.orbRise.heldWidthH / 0.45;
+        this.orbGlow = this.add.circle(
+            0,
+            0,
+            HERO_STAND_PX * LIFE_ASSETS.orb.glow.radiusH,
+            LIFE_ASSETS.orb.glow.color,
+            0.3
+        ).setBlendMode(BlendModes.ADD).setDepth(11).setVisible(false);
+        this.orbFlash = this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, LIFE_ASSETS.orb.glow.color, 0)
+            .setBlendMode(BlendModes.ADD).setScrollFactor(0).setDepth(145);
+        this.bannerBack = this.add.rectangle(WIDTH / 2, HEIGHT / 2, 690, 150, 0x100914, 0.94)
+            .setStrokeStyle(3, LIFE_ASSETS.orb.hudColor, 0.95)
+            .setScrollFactor(0).setDepth(152).setVisible(false);
+        this.bannerTitle = this.add.text(WIDTH / 2, HEIGHT / 2 - 24, 'ORB OF LIFE', {
+            fontFamily: 'Arial Black', fontSize: '36px', color: this.lifeHudColor,
+            stroke: '#030710', strokeThickness: 7,
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(153).setVisible(false);
+        this.bannerSub = this.add.text(WIDTH / 2, HEIGHT / 2 + 28, 'Life holds on.', {
+            fontFamily: 'Arial', fontSize: '22px', color: '#fff0f7',
+            stroke: '#030710', strokeThickness: 5,
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(153).setVisible(false);
     }
 
     updateChamberLighting(delta) {
@@ -527,6 +720,10 @@ export default class LifeChamberScene extends Scene {
         }
         context.globalAlpha = 1;
         context.globalCompositeOperation = 'source-over';
+    }
+
+    triggerGameOver() {
+        this.beginWaveFailure();
     }
 
     cleanup() {

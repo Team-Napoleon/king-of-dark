@@ -13,6 +13,9 @@ import {
     DARKWORLD_BG,
     MINA_SHEETS,
 } from '../config/actTwoData';
+import { ACT3_PACING, ACT3_SPEAKERS } from '../config/actThreeData';
+import { AFTER_FEAR_TO_LIFE } from '../config/lifeData';
+import { TIME_SCENE_KEYS } from '../config/timeData';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -23,7 +26,7 @@ export default class DarkWorldScene extends Scene {
     }
 
     init(data = {}) {
-        this.part = data.part === 'fearOutside' ? 'fearOutside' : 'village';
+        this.part = ['fearOutside', 'afterFear'].includes(data.part) ? data.part : 'village';
         if (import.meta.env.DEV) console.log(`[flow] DarkWorldScene init part=${this.part}`);
     }
 
@@ -76,8 +79,8 @@ export default class DarkWorldScene extends Scene {
         this.hud.controlsChip.setVisible(false);
         this.createOrbHud();
         this.bubble = new WorldBubble(this, {
-            speakers: ACT2_SPEAKERS,
-            pacing: ACT2_PACING,
+            speakers: this.part === 'afterFear' ? ACT3_SPEAKERS : ACT2_SPEAKERS,
+            pacing: this.part === 'afterFear' ? ACT3_PACING : ACT2_PACING,
             voiceStyle: { y: 150, maxWidth: 420, textColor: '#d9c8ff', glowColor: 0x7a3cff },
         });
         this.bubble.setAnchor('hero', () => ({
@@ -112,7 +115,20 @@ export default class DarkWorldScene extends Scene {
 
         this.runner = new BeatRunner(
             this,
-            this.part === 'village' ? ACT2_VILLAGE_BEATS : ACT2_FEAR_OUTSIDE_BEATS,
+            this.part === 'village'
+                ? ACT2_VILLAGE_BEATS
+                : this.part === 'afterFear'
+                    ? [
+                        { id: 'after-fear-fade-in', type: 'fx', name: 'fadeIn' },
+                        ...AFTER_FEAR_TO_LIFE.map((beat, index) => ({
+                            ...beat,
+                            id: `after-fear-${index}`,
+                            type: beat.t,
+                            scene: beat.t === 'goto' ? TIME_SCENE_KEYS.TIME_APPROACH : beat.scene,
+                            gesture: beat.who === 'MINA' && beat.text.startsWith('Next is Life.') ? 'point' : beat.gesture,
+                        })),
+                    ]
+                    : ACT2_FEAR_OUTSIDE_BEATS,
             this.createHandlers()
         ).start();
         this.elapsed = 0;
@@ -383,10 +399,10 @@ export default class DarkWorldScene extends Scene {
                         this.bubble.destroy();
                         this.scene.restart({ part: beat.part || 'fearOutside' });
                     } else {
-                        const next = ACT2_FX.next;
+                        const next = beat.scene || ACT2_FX.next;
                         this.bubble.destroy();
                         if (this.game.scene.keys[next]) {
-                            this.scene.start(next);
+                            this.scene.start(next, beat.data);
                         } else {
                             console.warn(`[DarkWorldScene] Scene "${next}" is not registered; returning to MainMenuScene.`);
                             this.scene.start('MainMenuScene');

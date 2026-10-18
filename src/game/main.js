@@ -6,6 +6,11 @@ import TempleScene from './scenes/Game';
 import ArenaScene from './scenes/ArenaScene';
 import DarkWorldScene from './scenes/DarkWorldScene';
 import DarknessScene from './scenes/DarknessScene';
+import HauntedCorridorScene from './scenes/HauntedCorridorScene';
+import SettlementScene from './scenes/SettlementScene';
+import TimeApproachScene from './scenes/TimeApproachScene';
+import TimeChamberScene from './scenes/TimeChamberScene';
+import MinaAfterTimeScene from './scenes/MinaAfterTimeScene';
 
 const config = {
     type: AUTO,
@@ -32,6 +37,11 @@ const config = {
         ArenaScene,
         DarkWorldScene,
         DarknessScene,
+        HauntedCorridorScene,
+        SettlementScene,
+        TimeApproachScene,
+        TimeChamberScene,
+        MinaAfterTimeScene,
     ],
 };
 

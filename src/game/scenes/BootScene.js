@@ -1,8 +1,11 @@
-import { Scene } from 'phaser';
+import { Scene, Textures } from 'phaser';
 import { preloadSheets } from '../config/animationData';
 import { INTRO_ACTORS } from '../config/introActors';
 import { preloadIntroImages } from '../config/introData';
 import { DARKWORLD_BG, MINA_SHEETS } from '../config/actTwoData';
+import { CORRIDOR, ORB_FEAR, STALKER_SHEETS } from '../config/actThreeData';
+import { CRAWLER as LIFE_CRAWLER, LIFE_ASSETS } from '../config/lifeData';
+import { TIME_ASSETS, TIME_SCENE_KEYS } from '../config/timeData';
 
 export default class BootScene extends Scene {
     constructor() {
@@ -60,6 +63,51 @@ export default class BootScene extends Scene {
                 endFrame: MINA_SHEETS.frameCount - 1,
             });
         });
+        this.load.image(CORRIDOR.tile.key, CORRIDOR.tile.file.replace('Backgrounds/', 'backgrounds/'));
+        this.load.image(CORRIDOR.endRoom.key, CORRIDOR.endRoom.file.replace('Backgrounds/', 'backgrounds/'));
+        this.load.spritesheet(ORB_FEAR.texture, ORB_FEAR.file, {
+            frameWidth: ORB_FEAR.frameWidth,
+            frameHeight: ORB_FEAR.frameHeight,
+            startFrame: 0,
+            endFrame: ORB_FEAR.frames - 1,
+        });
+        Object.entries(STALKER_SHEETS.textures).forEach(([key, file]) => {
+            this.load.spritesheet(key, file, {
+                frameWidth: STALKER_SHEETS.frameWidth,
+                frameHeight: STALKER_SHEETS.frameHeight,
+                startFrame: 0,
+                endFrame: STALKER_SHEETS.frameCount - 1,
+            });
+        });
+        this.load.image(LIFE_ASSETS.outsideBg.key, LIFE_ASSETS.outsideBg.path);
+        this.load.spritesheet(LIFE_ASSETS.npc.key, LIFE_ASSETS.npc.path, {
+            frameWidth: LIFE_ASSETS.npc.frameWidth,
+            frameHeight: LIFE_ASSETS.npc.frameHeight,
+        });
+        [
+            LIFE_ASSETS.crawler.chaseRight,
+            LIFE_ASSETS.crawler.chaseLeft,
+            LIFE_ASSETS.crawler.attackRight,
+            LIFE_ASSETS.crawler.attackLeft,
+        ].forEach((sheet) => {
+            this.load.spritesheet(sheet.key, sheet.path, {
+                frameWidth: LIFE_ASSETS.crawler.frameWidth,
+                frameHeight: LIFE_ASSETS.crawler.frameHeight,
+                startFrame: 0,
+                endFrame: LIFE_ASSETS.crawler.frames - 1,
+            });
+        });
+        this.load.spritesheet(LIFE_ASSETS.reveal.key, LIFE_ASSETS.reveal.path, {
+            frameWidth: LIFE_ASSETS.reveal.frameWidth,
+            frameHeight: LIFE_ASSETS.reveal.frameHeight,
+            startFrame: 0,
+            endFrame: LIFE_ASSETS.reveal.frames - 1,
+        });
+        this.load.image(
+            TIME_ASSETS.BG_IMAGE.key,
+            TIME_ASSETS.BG_IMAGE.path.replace(/\.jpg$/i, '.jpeg')
+        );
+        this.load.image(TIME_ASSETS.HOURGLASS_STATIC.key, TIME_ASSETS.HOURGLASS_STATIC.path);
         this.load.image('bg-menu', 'assets/backgrounds/menu.jpg');
         this.load.image('bg-temple', 'assets/backgrounds/temple.jpg');
         this.load.image('bg-arena', 'assets/backgrounds/arena.jpg');
@@ -80,9 +128,119 @@ export default class BootScene extends Scene {
                 });
             }
         });
+        [
+            CORRIDOR.tile.key,
+            CORRIDOR.endRoom.key,
+            ORB_FEAR.texture,
+            ...Object.keys(STALKER_SHEETS.textures),
+            LIFE_ASSETS.outsideBg.key,
+            LIFE_ASSETS.npc.key,
+            LIFE_ASSETS.crawler.chaseRight.key,
+            LIFE_ASSETS.crawler.chaseLeft.key,
+            LIFE_ASSETS.crawler.attackRight.key,
+            LIFE_ASSETS.crawler.attackLeft.key,
+            LIFE_ASSETS.reveal.key,
+            TIME_ASSETS.BG_IMAGE.key,
+            TIME_ASSETS.HOURGLASS_STATIC.key,
+        ].forEach((textureKey) => {
+            if (this.textures.exists(textureKey)) {
+                this.textures.get(textureKey).setFilter(Textures.FilterMode.NEAREST);
+            }
+        });
+        if (!this.anims.exists('orb-fear-pulse')) {
+            this.anims.create({
+                key: 'orb-fear-pulse',
+                frames: this.anims.generateFrameNumbers(ORB_FEAR.texture, {
+                    start: 0,
+                    end: ORB_FEAR.frames - 1,
+                }),
+                frameRate: 1000 / ORB_FEAR.frameMs,
+                repeat: -1,
+            });
+        }
+        Object.entries(STALKER_SHEETS.textures).forEach(([textureKey, file]) => {
+            const direction = textureKey === 'stalker-right' ? 'right' : 'left';
+            const animationKey = `stalker-chase-${direction}`;
+            if (this.textures.exists(textureKey)) {
+                this.textures.get(textureKey).setFilter(1);
+            }
+            if (!this.anims.exists(animationKey)) {
+                this.anims.create({
+                    key: animationKey,
+                    frames: this.anims.generateFrameNumbers(textureKey, {
+                        start: 0,
+                        end: STALKER_SHEETS.frameCount - 1,
+                    }),
+                    frameRate: STALKER_SHEETS.fps,
+                    repeat: -1,
+                });
+            }
+        });
+        LIFE_ASSETS.npc.rows_order.forEach((row, rowIndex) => {
+            const key = `life-npc-${row}-idle`;
+            if (!this.anims.exists(key)) {
+                this.anims.create({
+                    key,
+                    frames: [
+                        { key: LIFE_ASSETS.npc.key, frame: rowIndex * LIFE_ASSETS.npc.cols },
+                        { key: LIFE_ASSETS.npc.key, frame: rowIndex * LIFE_ASSETS.npc.cols + 1 },
+                    ],
+                    frameRate: LIFE_ASSETS.npc.idleFps,
+                    repeat: -1,
+                });
+            }
+        });
+        [
+            [LIFE_ASSETS.crawler.chaseRight.key, 'chase-right', LIFE_CRAWLER.chaseFps],
+            [LIFE_ASSETS.crawler.chaseLeft.key, 'chase-left', LIFE_CRAWLER.chaseFps],
+            [LIFE_ASSETS.crawler.attackRight.key, 'attack-right', LIFE_CRAWLER.attackFps],
+            [LIFE_ASSETS.crawler.attackLeft.key, 'attack-left', LIFE_CRAWLER.attackFps],
+        ].forEach(([textureKey, suffix, frameRate]) => {
+            const key = `life-crawler-${suffix}`;
+            if (!this.anims.exists(key)) {
+                this.anims.create({
+                    key,
+                    frames: this.anims.generateFrameNumbers(textureKey, {
+                        start: 0,
+                        end: LIFE_ASSETS.crawler.frames - 1,
+                    }),
+                    frameRate,
+                    repeat: suffix.startsWith('attack') ? 0 : -1,
+                });
+            }
+        });
+        if (!this.anims.exists('life-hatch')) {
+            this.anims.create({
+                key: 'life-hatch',
+                frames: this.anims.generateFrameNumbers(LIFE_ASSETS.reveal.key, {
+                    start: LIFE_ASSETS.reveal.hatchFrames[0],
+                    end: LIFE_ASSETS.reveal.hatchFrames[1],
+                }),
+                frameRate: LIFE_ASSETS.reveal.fps,
+                repeat: 0,
+            });
+        }
         const requestedScene = typeof window !== 'undefined'
             ? new URLSearchParams(window.location.search).get('scene')
             : null;
+        const debugGrid = typeof window !== 'undefined' &&
+            new URLSearchParams(window.location.search).get('debug') === 'grid';
+        const timeSceneRoutes = {
+            TimeApproach: TIME_SCENE_KEYS.TIME_APPROACH,
+            TimeChamber: TIME_SCENE_KEYS.TIME_CHAMBER,
+            MinaAfterTime: TIME_SCENE_KEYS.MINA_AFTER_TIME,
+        };
+        if (import.meta.env.DEV && timeSceneRoutes[requestedScene]) {
+            if (this.registry.get('orbs') == null) this.registry.set('orbs', ['fear']);
+            this.scene.start(timeSceneRoutes[requestedScene]);
+            return;
+        }
+        if (import.meta.env.DEV &&
+            (requestedScene === 'Settlement' || requestedScene === 'SettlementWave' || debugGrid)) {
+            if (this.registry.get('orbs') === undefined) this.registry.set('orbs', []);
+            this.scene.start('SettlementScene', { waveOnly: requestedScene === 'SettlementWave' });
+            return;
+        }
         if (import.meta.env.DEV && requestedScene === 'DarkWorld') {
             if (this.registry.get('orbs') === undefined) {
                 this.registry.set('orbs', []);
@@ -102,6 +260,15 @@ export default class BootScene extends Scene {
         }
         if (import.meta.env.DEV && requestedScene === 'Darkness') {
             this.scene.start('DarknessScene');
+            return;
+        }
+        if (import.meta.env.DEV && (requestedScene === 'Corridor' || requestedScene === 'CorridorChase')) {
+            if (this.registry.get('orbs') === undefined) {
+                this.registry.set('orbs', []);
+            }
+            this.scene.start('HauntedCorridorScene', {
+                chaseStart: requestedScene === 'CorridorChase',
+            });
             return;
         }
         this.scene.start('MainMenuScene');

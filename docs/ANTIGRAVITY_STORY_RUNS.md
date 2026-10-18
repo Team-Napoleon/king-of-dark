@@ -18,3 +18,18 @@
 - Replaced the stalled King freeze/expanding-blackout event with the timer-driven `ARENA_DEFEAT` sequence, including King and hero WorldBubble lines, pooled smoke, stagger, swallow, and a guarded DarknessScene start with a master timeout.
 - Added DarknessScene narration with delta-driven type/fade timing, Enter skip, a 40-second timeout, and guarded handoff to DarkWorldScene. Set the Act I end-card hold to zero and its next scene to DarkWorldScene.
 - Changed files: `src/game/entities/KingOfDark.js`, `src/game/scenes/ArenaScene.js`, `src/game/scenes/DarknessScene.js`, `src/game/main.js`, `src/game/config/actOneData.js`.
+
+## Act III, Run 5A — Haunted Corridor and Fear Finale
+
+- Added the Haunted Corridor chase, Stalker and obstacle entities, Fear orb finale, Scene 9 return, asset loading, scene registration, and development routes.
+- Corrected the corridor beat timing to treat BeatRunner deltas as seconds rather than converting them from milliseconds a second time. Removed temporary beat/catch console logging after the browser trace.
+- Browser verification reached the opening narration, movement prompt, Stalker appearance, blackout, and chase with no console errors. Full obstacle, shrine/Fear, and Scene 9 completion were not observed; perform the manual checklist before considering the run fully validated.
+- Changed files: `src/game/scenes/BootScene.js`, `src/game/main.js`, `src/game/scenes/DarkWorldScene.js`, `src/game/entities/Stalker.js`, `src/game/entities/CorridorObstacle.js`, `src/game/scenes/HauntedCorridorScene.js`.
+
+## Act III, Run 10A — Settlement and Orb of Life Approach
+
+- Added SettlementScene with scaled outside art, camera/floor placement, lighting mask, fire effects, survivors, Mina/hero movement, WorldBubble dialogue, wave retry flow, crawler pooling/combat, hatch reveal, and LifeChamberScene fallback.
+- Loaded and registered settlement assets/animations and the scene, added `?scene=Settlement`, `?scene=SettlementWave`, and `?debug=grid`, and replaced DarkWorldScene's after-Fear dialogue data with `AFTER_FEAR_TO_LIFE` plus a Scene 9 fade-in.
+- Crawler attacks use the existing hero damage path; required hit mapping: punch/combo = 3 hits, kick = 2, sword = 2, fire = 1.
+- Browser verified SettlementWave and the dialogue sequence progressing to the Kid's line. Console had no errors on the tested routes. The full wave completion, hatch exit, Scene 11/menu handoff, and after-Fear transition were not observed live.
+- Changed files: `src/game/scenes/BootScene.js`, `src/game/main.js`, `src/game/scenes/DarkWorldScene.js`, `src/game/scenes/SettlementScene.js`, `src/game/entities/Crawler.js`.

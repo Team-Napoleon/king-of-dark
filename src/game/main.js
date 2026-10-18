@@ -11,6 +11,7 @@ import SettlementScene from './scenes/SettlementScene';
 import ClockTowerScene from './scenes/ClockTowerScene';
 import EndlessRoomScene from './scenes/EndlessRoomScene';
 import AfterTimeScene from './scenes/AfterTimeScene';
+import LifeChamberScene from './scenes/LifeChamberScene';
 
 const config = {
     type: AUTO,
@@ -42,6 +43,7 @@ const config = {
         ClockTowerScene,
         EndlessRoomScene,
         AfterTimeScene,
+        LifeChamberScene,
     ],
 };
 

@@ -85,6 +85,7 @@ export default class BootScene extends Scene {
             });
         });
         this.load.image(LIFE_ASSETS.outsideBg.key, LIFE_ASSETS.outsideBg.path);
+        this.load.image(LIFE_ASSETS.insideBg.key, LIFE_ASSETS.insideBg.path);
         this.load.spritesheet(LIFE_ASSETS.npc.key, LIFE_ASSETS.npc.path, {
             frameWidth: LIFE_ASSETS.npc.frameWidth,
             frameHeight: LIFE_ASSETS.npc.frameHeight,
@@ -107,6 +108,12 @@ export default class BootScene extends Scene {
             frameHeight: LIFE_ASSETS.reveal.frameHeight,
             startFrame: 0,
             endFrame: LIFE_ASSETS.reveal.frames - 1,
+        });
+        this.load.spritesheet(LIFE_ASSETS.orb.key, LIFE_ASSETS.orb.path, {
+            frameWidth: LIFE_ASSETS.orb.frameWidth,
+            frameHeight: LIFE_ASSETS.orb.frameHeight,
+            startFrame: 0,
+            endFrame: LIFE_ASSETS.orb.frames - 1,
         });
         this.timeEndlessAvailable = true;
         const onTimeAssetError = (file) => {
@@ -144,12 +151,14 @@ export default class BootScene extends Scene {
             ORB_FEAR.texture,
             ...Object.keys(STALKER_SHEETS.textures),
             LIFE_ASSETS.outsideBg.key,
+            LIFE_ASSETS.insideBg.key,
             LIFE_ASSETS.npc.key,
             LIFE_ASSETS.crawler.chaseRight.key,
             LIFE_ASSETS.crawler.chaseLeft.key,
             LIFE_ASSETS.crawler.attackRight.key,
             LIFE_ASSETS.crawler.attackLeft.key,
             LIFE_ASSETS.reveal.key,
+            LIFE_ASSETS.orb.key,
             ...Object.keys(TIME_ASSETS.images),
             ...Object.keys(TIME_ASSETS.optionalImages),
             ...TIME_ASSETS.chamberSheets.map((sheet) => sheet.key),
@@ -232,6 +241,18 @@ export default class BootScene extends Scene {
                 repeat: 0,
             });
         }
+        if (this.textures.exists(LIFE_ASSETS.orb.key) &&
+            !this.anims.exists(LIFE_ASSETS.orb.anim)) {
+            this.anims.create({
+                key: LIFE_ASSETS.orb.anim,
+                frames: this.anims.generateFrameNumbers(LIFE_ASSETS.orb.key, {
+                    start: 0,
+                    end: LIFE_ASSETS.orb.frames - 1,
+                }),
+                frameRate: 1000 / LIFE_ASSETS.orb.frameMs,
+                repeat: -1,
+            });
+        }
         if (this.textures.exists('time-orb') && !this.anims.exists('time-orb-pulse')) {
             this.anims.create({
                 key: 'time-orb-pulse',
@@ -248,6 +269,14 @@ export default class BootScene extends Scene {
             : null;
         const debugGrid = typeof window !== 'undefined' &&
             new URLSearchParams(window.location.search).get('debug') === 'grid';
+        if (import.meta.env.DEV &&
+            (requestedScene === 'LifeChamber' || requestedScene === 'LifeChamberWave' || debugGrid)) {
+            if (this.registry.get('orbs') === undefined) this.registry.set('orbs', ['fear', 'time']);
+            this.scene.start('LifeChamberScene', {
+                waveOnly: requestedScene === 'LifeChamberWave',
+            });
+            return;
+        }
         if (import.meta.env.DEV && TIME_DEBUG && TIME_FLOW.devRoutes[requestedScene]) {
             if (this.registry.get('orbs') == null) this.registry.set('orbs', ['fear']);
             this.scene.start(

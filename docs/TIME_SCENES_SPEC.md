@@ -7,7 +7,7 @@ Script source: "King of Dark Full Script (Readable English)", Scenes 9-13, and t
 - The settlement / Orb of Life work already built (SettlementScene, lifeData.js, Crawler.js, `public/assets/Life/*`) is script **Scene 13**. Keep it exactly as it is.
 - Correct order: Scene 9 (Mina after Fear, outside) -> **Scene 10** ClockTowerScene -> **Scene 11** EndlessRoomScene (room + chamber) -> **Scene 12** AfterTimeScene -> **Scene 13** SettlementScene (existing).
 - Scene 9's last lines must be the script's (see `SCENE9_TIME_LINES`: "Next is Time. Look for the tower where the clock stopped.", objective FIND THE ORB OF TIME). The text that pointed to the settlement belongs to Scene 12.
-- ORBS HUD counts collected orbs from the registry (`orbs` array: fear, time, life ...). After Time it reads 2/5, after Life 3/5. Each orb is added once only.
+- ORBS HUD counts collected orbs from the registry (`orbs` array: fear, time, life, truth). After Time it reads 2 / 4, after Life 3 / 4. Each orb is added once only.
 
 ## 2. Pictures (public/assets/Time/)
 | Key | File | Use |
@@ -41,7 +41,7 @@ State machine (all timers from delta, no tweens on the hero):
 ## 5. The hidden chamber and the Orb of Time (same scene, second layer)
 - After `dissolve` the room layer is hidden and the chamber layer is shown: a full-screen image playing `chamberAt(t)` (swap the texture key and frame each frame from the clock, no allocation). Hero appears at `CHAMBER.heroStartX` on `CHAMBER.floorFeetY` and auto-walks to `heroStopX` (walk clip, `heroWalkSeconds`). The painted orb is part of the chamber picture.
 - `solved` line. Then `orbSwapAndRise`: the real orb sprite (`time-orb`, animation `time-orb-pulse`) is placed exactly over the painted orb: sprite pixel (anchorX, anchorY) = (96,100) at art point `CHAMBER.orbAnchorArt`, scale `CHAMBER.orbScaleArt * ART.scale`, plus an additive glow (`ORB_TIME.glowColor`). At the same moment a dark ellipse "void" (`CHAMBER.void`, one canvas texture created once with a radial gradient: dark centre, cyan rim) fades in over the painted orb so nothing is left behind, then rests at `void.restAlpha`. The orb rises `riseArt` over `riseSeconds` (timer driven), small shake.
-- `orbToHero`: floats to the hero over `floatToHeroSeconds` with a small bob, shrinks to `heldDiameterH` x hero height, absorbed with a flash (`absorbFlashSeconds`). `bannerOrb`: banner `ORB OF TIME` + sub `ORB_TIME.bannerSub` using the existing orb banner code. `orbCollected`: add `time` to registry `orbs` once only; the ORBS HUD pulses and reads 2/5 (derive the count from the registry, never a constant). Orb colour in the HUD: `ORB_TIME.hudColor`.
+- `orbToHero`: floats to the hero over `floatToHeroSeconds` with a small bob, shrinks to `heldDiameterH` x hero height, absorbed with a flash (`absorbFlashSeconds`). `bannerOrb`: banner `ORB OF TIME` + sub `ORB_TIME.bannerSub` using the existing orb banner code. `orbCollected`: add `time` to registry `orbs` once only; the ORBS HUD pulses and reads 2 / 4 (derive the count from the registry, never a constant). Orb colour in the HUD: `ORB_TIME.hudColor`.
 - Finally fade (`afterFade`) and start AfterTimeScene.
 
 ## 6. Scene 12: AfterTimeScene (outside, Hero and Mina)
@@ -54,8 +54,8 @@ Routes (same mechanism as ?scene=Settlement): `?scene=ClockTower`, `?scene=Endle
 - Scene 9 ends with the script's Time lines and objective, then Scene 10 starts (no settlement jump).
 - Scene 10: bubbles above the right heads, doors open with blue light, hero walks in, fade to the room.
 - Scene 11: three doors with hours; E enters; a wrong door resets (flash, rewind, LOOP+1, new hours); a correct door dims and keeps progress; the first loop's middle door is wrong; three correct in a row dissolve the doors; hints appear after 3 and 5 resets; lines play once.
-- Chamber: baked animation loops; the orb sprite sits exactly on the painted orb, rises, floats to the hero, is absorbed; the painted orb is hidden; banner; HUD 2/5; `time` added once.
-- Scene 12 -> Scene 13 works and the ORBS HUD reads 3/5 after Life. R and replay never stack effects or duplicate the orb. No console errors.
+- Chamber: baked animation loops; the orb sprite sits exactly on the painted orb, rises, floats to the hero, is absorbed; the painted orb is hidden; banner; HUD 2 / 4; `time` added once.
+- Scene 12 -> Scene 13 works and the ORBS HUD reads 3 / 4 after Life. R and replay never stack effects or duplicate the orb. No console errors.
 
 ## 9. Optional: art prompt for the Endless Room background (Leonardo, 1344x768, same look as the temple)
 ```

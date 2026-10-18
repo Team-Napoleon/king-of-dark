@@ -4,6 +4,7 @@
 // Art coordinates are in SOURCE PIXELS of the 1344x768 pictures; multiply by ART.scale for the game world.
 // NOTE: the Orb of Life settlement already built (SettlementScene, lifeData.js, Crawler.js) is script SCENE 13.
 // It stays untouched. Flow: Scene 9 -> ClockTowerScene (10) -> EndlessRoomScene (11) -> AfterTimeScene (12) -> SettlementScene (13).
+import { ORB_NAMES } from './actTruthData';
 
 export const TIME_DEBUG = true; // dev keys + routes. Set false before submitting.
 
@@ -18,7 +19,7 @@ export const TIME_FLOW = {
     after: 'AfterTimeScene',           // Scene 12
     next: 'SettlementScene',           // Scene 13 (already built, do not change its gameplay)
     // registry
-    orbId: 'time',                     // pushed once into registry 'orbs' (Fear, Time, Life ...). After Time the HUD reads 2/5, after Life 3/5.
+    orbId: 'time',                     // pushed once into registry 'orbs'. After Time the HUD reads 2 / 4, after Life 3 / 4.
     objectiveTime: 'FIND THE ORB OF TIME',
     objectiveLife: 'FIND THE ORB OF LIFE',
     devRoutes: { ClockTower: 'ClockTowerScene', EndlessRoom: 'EndlessRoomScene', TimeChamber: 'EndlessRoomScene', MinaAfterTime: 'AfterTimeScene' }, // ?scene=...
@@ -193,7 +194,7 @@ export const ORB_TIME = {
     floatToHeroSeconds: 1.6, bobPx: 5,
     heldDiameterH: 0.4,                  // diameter relative to the hero's standing height when it reaches him
     absorbFlashSeconds: 0.5,
-    bannerTitle: 'ORB OF TIME',
+    bannerTitle: ORB_NAMES.time,
     bannerSub: 'The loop is broken.',
     afterFade: 0.7,                      // fade, then start AfterTimeScene
 };

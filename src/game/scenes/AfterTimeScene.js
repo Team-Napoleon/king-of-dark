@@ -14,6 +14,7 @@ import {
     TIME_FLOW,
     WORLD,
 } from '../config/timeData';
+import { ORB_ORDER, orbHudText } from '../config/actTruthData';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -23,7 +24,7 @@ const SPEAKERS = {
 };
 
 function ensureOrbProgress(registry) {
-    if (registry.get('orbs') == null) registry.set('orbs', ['fear', 'time']);
+    if (registry.get('orbs') == null) registry.set('orbs', ORB_ORDER.slice(0, 2));
 }
 
 export default class AfterTimeScene extends Scene {
@@ -158,7 +159,7 @@ export default class AfterTimeScene extends Scene {
     updateOrbHud() {
         const orbs = this.registry.get('orbs');
         const count = Array.isArray(orbs) ? orbs.length : 0;
-        this.orbText.setText(`ORBS ${count}/5`);
+        this.orbText.setText(orbHudText(count));
     }
 
     createHandlers() {

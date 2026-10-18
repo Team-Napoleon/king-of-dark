@@ -5,6 +5,7 @@ import PlayerHud from '../ui/PlayerHud';
 import WorldBubble from '../ui/WorldBubble';
 import { ACT3_PACING, ACT3_SPEAKERS } from '../config/actThreeData';
 import { HERO_PHYSICS, HERO_STAND_PX } from '../config/animationData';
+import { ORB_NAMES, ORB_ORDER, orbHudText } from '../config/actTruthData';
 import {
     ART,
     CHAMBER,
@@ -29,7 +30,7 @@ const HEIGHT = 720;
 const VOID_TEXTURE = 'time-chamber-orb-void';
 
 function ensureOrbProgress(registry) {
-    if (registry.get('orbs') == null) registry.set('orbs', ['fear']);
+    if (registry.get('orbs') == null) registry.set('orbs', ORB_ORDER.slice(0, 1));
 }
 
 function tintCss(color) {
@@ -262,7 +263,7 @@ export default class EndlessRoomScene extends Scene {
             .setBlendMode(BlendModes.ADD).setScrollFactor(0).setDepth(145);
         this.bannerBack = this.add.rectangle(WIDTH / 2, HEIGHT / 2, 690, 150, 0x061020, 0.94)
             .setStrokeStyle(3, ORB_TIME.hudColor, 0.95).setScrollFactor(0).setDepth(152).setVisible(false);
-        this.bannerTitle = this.add.text(WIDTH / 2, HEIGHT / 2 - 24, ORB_TIME.bannerTitle, {
+        this.bannerTitle = this.add.text(WIDTH / 2, HEIGHT / 2 - 24, ORB_NAMES[ORB_TIME.id], {
             fontFamily: 'Arial Black', fontSize: '36px', color: tintCss(ORB_TIME.hudColor),
             stroke: '#030710', strokeThickness: 7,
         }).setOrigin(0.5).setScrollFactor(0).setDepth(153).setVisible(false);
@@ -612,7 +613,9 @@ export default class EndlessRoomScene extends Scene {
         if (name === 'orbCollected') {
             const orbs = this.registry.get('orbs');
             const list = Array.isArray(orbs) ? orbs : [];
-            if (!list.includes(ORB_TIME.id)) this.registry.set('orbs', [...list, ORB_TIME.id]);
+            if (ORB_ORDER.includes(ORB_TIME.id) && !list.includes(ORB_TIME.id)) {
+                this.registry.set('orbs', [...list, ORB_TIME.id]);
+            }
             this.orbCollected = true;
             this.updateOrbHud(true);
             this.hudOrbPulse = 0;
@@ -704,7 +707,7 @@ export default class EndlessRoomScene extends Scene {
         const count = Array.isArray(orbs) ? orbs.length : 0;
         if (force || count !== this.orbCount) {
             this.orbCount = count;
-            this.orbText.setText(`ORBS ${count}/5`);
+            this.orbText.setText(orbHudText(count));
         }
     }
 

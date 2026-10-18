@@ -6,12 +6,13 @@ import { ACT3_PACING, ACT3_SPEAKERS } from '../config/actThreeData';
 import { MINA_SHEETS } from '../config/actTwoData';
 import { HERO_PHYSICS, HERO_STAND_PX } from '../config/animationData';
 import { TIME_ASSETS, TIME_SCENE_KEYS, MINA_AFTER_TIME_CONFIG } from '../config/timeData';
+import { ORB_ORDER } from '../config/actTruthData';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
 
 function ensureOrbProgress(registry) {
-    if (registry.get('orbs') == null) registry.set('orbs', ['fear', 'time']);
+    if (registry.get('orbs') == null) registry.set('orbs', ORB_ORDER.slice(0, 2));
 }
 
 export default class MinaAfterTimeScene extends Scene {

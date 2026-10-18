@@ -5,12 +5,13 @@ import WorldBubble from '../ui/WorldBubble';
 import { ACT3_PACING, ACT3_SPEAKERS } from '../config/actThreeData';
 import { HERO_PHYSICS, HERO_STAND_PX } from '../config/animationData';
 import { TIME_APPROACH_CONFIG, TIME_ASSETS, TIME_SCENE_KEYS } from '../config/timeData';
+import { ORB_ORDER } from '../config/actTruthData';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
 
 function ensureOrbProgress(registry) {
-    if (registry.get('orbs') == null) registry.set('orbs', ['fear']);
+    if (registry.get('orbs') == null) registry.set('orbs', ORB_ORDER.slice(0, 1));
 }
 
 export default class TimeApproachScene extends Scene {

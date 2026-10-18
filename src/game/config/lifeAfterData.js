@@ -8,16 +8,16 @@ export const LIFE_FLOW = {
   settlement: 'SettlementScene',     // Scene 13 (built)
   chamber:    'LifeChamberScene',    // Scene 14 (CHAMBER_BEATS in lifeData.js)
   after:      'AfterLifeScene',      // Scene 15 (AFTER_LIFE_BEATS below)
-  next:       'SoulsOutsideScene',   // Scene 16 (built later). If it is not registered: console.warn, then start MainMenuScene.
+  next:       'TruthOutsideScene',   // Scene 16. If it is not registered: console.warn, then start MainMenuScene.
   nextFallback: 'MainMenuScene',
   orbId: 'life',                     // pushed ONCE into registry 'orbs'. Order now: fear, time, life.
-  expectedOrbCountAfterLife: 3,      // the ORBS HUD must read 3/5 (always derive it from the registry, never use this as a constant in code)
-  objectiveSouls: 'FIND THE ORB OF SOULS',
+  expectedOrbCountAfterLife: 3,      // the ORBS HUD reads 3 / 4; always derive it from the registry.
+  objectiveTruth: 'FIND THE ORB OF TRUTH',
   devRoutes: { LifeChamber: 'LifeChamberScene', LifeChamberWave: 'LifeChamberScene', MinaAfterLife: 'AfterLifeScene' },  // ?scene=...
 };
 
 // Scene 15: outside the settlement, same picture as Scene 13 (life-outside-bg), static layout, fire at full level.
-// Hero comes back up out of the fire pit, the elder thanks him, Mina points to Souls.
+// Hero comes back up out of the fire pit, the elder thanks him, Mina points to Truth.
 export const AFTER_LIFE = {
   bg: 'life-outside-bg',
   floorFeetY: 392,                      // same feet line as SETTLEMENT
@@ -39,9 +39,9 @@ export const AFTER_LIFE_SCENE_BEATS = [   // same shape as lifeData.js beats (t:
   { t: 'line', who: 'ELDER', text: 'Take it with our thanks. May it outlive us.' },
   { t: 'line', who: 'MINA', text: "{COUNT}. You're closer than you think." },
   { t: 'line', who: 'HERO', text: 'Closer to the end, or to what I did?' },
-  { t: 'line', who: 'MINA', text: 'Both. Souls is next. Follow the road to the graveyard gate.' },
-  { t: 'fx', name: 'objective', text: 'FIND THE ORB OF SOULS' },
+  { t: 'line', who: 'MINA', text: "Both. Only Truth remains, and it's the hardest. Go to the black plains and look for the ring." },
+  { t: 'fx', name: 'objective', text: 'FIND THE ORB OF TRUTH' },
   { t: 'fx', name: 'minaWalksEastHeroFollows' },
   { t: 'fx', name: 'fadeOut', seconds: 0.8 },
-  { t: 'goto', scene: 'SoulsOutsideScene' },
+  { t: 'goto', scene: 'TruthOutsideScene', data: { part: 'before' } },
 ];

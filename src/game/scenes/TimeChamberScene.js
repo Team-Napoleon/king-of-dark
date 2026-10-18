@@ -6,13 +6,14 @@ import { ACT3_PACING, ACT3_SPEAKERS } from '../config/actThreeData';
 import { LIFE_ASSETS } from '../config/lifeData';
 import { HERO_PHYSICS, HERO_STAND_PX } from '../config/animationData';
 import { TIME_ASSETS, TIME_CHAMBER_CONFIG, TIME_SCENE_KEYS } from '../config/timeData';
+import { ORB_NAMES, ORB_ORDER, orbHudText } from '../config/actTruthData';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
 const FLOOR_REL = TIME_CHAMBER_CONFIG.heroSpawn.yRel;
 
 function ensureOrbProgress(registry) {
-    if (registry.get('orbs') == null) registry.set('orbs', ['fear']);
+    if (registry.get('orbs') == null) registry.set('orbs', ORB_ORDER.slice(0, 1));
 }
 
 export default class TimeChamberScene extends Scene {
@@ -229,8 +230,9 @@ export default class TimeChamberScene extends Scene {
 
     updateOrbHud() {
         const orbs = this.registry.get('orbs');
-        const count = Array.isArray(orbs) ? orbs.length : 1;
-        this.orbText.setText(`ORBS ${count}/5`);
+        const count = Array.isArray(orbs) ? orbs.length : 0;
+        this.orbCount = count;
+        this.orbText.setText(orbHudText(count));
     }
 
     startLine(beat) {
@@ -405,7 +407,7 @@ export default class TimeChamberScene extends Scene {
             if (progress >= 1) {
                 this.orbState = 'absorbed';
                 this.orb.setVisible(false);
-                this.registry.set('orbs', ['fear', 'time']);
+                this.registry.set('orbs', ORB_ORDER.slice(0, 2));
                 this.updateOrbHud();
                 this.flashElapsed = 0;
                 this.timeAura.setVisible(true);
@@ -435,8 +437,8 @@ export default class TimeChamberScene extends Scene {
             } else if (this.orbState === 'absorbed') {
                 this.phase = 'banner';
                 this.bannerElapsed = 0;
-                this.bannerTitle.setText(TIME_CHAMBER_CONFIG.orbBanner.title);
-                this.bannerProgress.setText(TIME_CHAMBER_CONFIG.orbBanner.progressText);
+                this.bannerTitle.setText(ORB_NAMES.time);
+                this.bannerProgress.setText(orbHudText(this.orbCount));
                 this.banner.setVisible(true);
             }
         }

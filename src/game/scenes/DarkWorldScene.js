@@ -15,6 +15,7 @@ import {
 } from '../config/actTwoData';
 import { ACT3_PACING, ACT3_SPEAKERS } from '../config/actThreeData';
 import { SCENE9_TIME_LINES, TIME_FLOW } from '../config/timeData';
+import { ORB_ORDER, orbHudText } from '../config/actTruthData';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -36,7 +37,7 @@ export default class DarkWorldScene extends Scene {
     createScene() {
         this.cameras.main.resetFX();
         if (this.registry.get('orbs') === undefined) {
-            this.registry.set('orbs', []);
+            this.registry.set('orbs', ORB_ORDER.slice(0, 0));
         }
         this.cameras.main.setBackgroundColor('#000000');
         this.sourceScale = HEIGHT / DARKWORLD_BG.cropH;
@@ -265,7 +266,7 @@ export default class DarkWorldScene extends Scene {
         const count = Array.isArray(orbs) ? orbs.length : 0;
         if (force || count !== this.orbCount) {
             this.orbCount = count;
-            this.orbText.setText(`ORBS ${count}/${ACT2_FX.orbHud.total}`);
+            this.orbText.setText(orbHudText(count));
         }
     }
 

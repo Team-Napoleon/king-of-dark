@@ -13,6 +13,8 @@ import EndlessRoomScene from './scenes/EndlessRoomScene';
 import AfterTimeScene from './scenes/AfterTimeScene';
 import LifeChamberScene from './scenes/LifeChamberScene';
 import AfterLifeScene from './scenes/AfterLifeScene';
+import TruthOutsideScene from './scenes/TruthOutsideScene';
+import TruthCaveScene from './scenes/TruthCaveScene';
 
 const config = {
     type: AUTO,
@@ -46,6 +48,8 @@ const config = {
         AfterTimeScene,
         LifeChamberScene,
         AfterLifeScene,
+        TruthOutsideScene,
+        TruthCaveScene,
     ],
 };
 

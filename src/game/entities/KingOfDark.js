@@ -46,8 +46,6 @@ export default class KingOfDark {
 
         this.visual = scene.add.sprite(x, y + KING.body.height / 2, 'king-idle', 0).setDepth(6);
         this.aura = scene.add.ellipse(x, y, 260, 340, 0x6126a8, 0.2).setDepth(4);
-        this.eyeLeft = scene.add.ellipse(x - 30, y + 40, 24, 12, 0xa76bff, 0.9).setDepth(52);
-        this.eyeRight = scene.add.ellipse(x + 30, y + 40, 24, 12, 0xa76bff, 0.9).setDepth(52);
         this.attackMarker = scene.add.graphics().setDepth(52).setVisible(false);
         this.poseVisual(0);
     }
@@ -132,10 +130,6 @@ export default class KingOfDark {
         this.swordCooldown = Math.max(0, this.swordCooldown - seconds);
         this.flashTimer = Math.max(0, this.flashTimer - seconds);
         this.eyeFlashTimer = Math.max(0, this.eyeFlashTimer - seconds);
-        if (this.eyeFlashTimer === 0) {
-            this.eyeLeft.setFillStyle(0xa76bff, 0.9);
-            this.eyeRight.setFillStyle(0xa76bff, 0.9);
-        }
 
         if (player && player.sprite && player.sprite.active) {
             this.facing = player.sprite.x < this.sprite.x ? -1 : 1;
@@ -341,8 +335,6 @@ export default class KingOfDark {
         this.visual.setVisible(!this.visualHidden);
         this.aura.setPosition(this.sprite.x, this.sprite.y + 5);
         this.aura.setAlpha(0.14 + (Math.sin(this.elapsed * 4) + 1) * 0.06);
-        this.eyeLeft.setPosition(this.sprite.x - 30, this.sprite.y + 40);
-        this.eyeRight.setPosition(this.sprite.x + 30, this.sprite.y + 40);
         if (this.flashTimer > 0) {
             this.visual.setTint(0xffffff).setTintMode(TintModes.FILL);
         } else if (this.phaseTwo) {
@@ -353,12 +345,9 @@ export default class KingOfDark {
     }
 
     flashEyes(duration = KING.eyeFlashDuration) {
-        if (!this.eyeLeft || !this.eyeLeft.active || !this.eyeRight || !this.eyeRight.active) {
-            return;
-        }
+        // The old placeholder eye ellipses were removed (they showed up on the legs);
+        // the sprite art already has its own eyes, so this is now a no-op kept for callers.
         this.eyeFlashTimer = duration;
-        this.eyeLeft.setFillStyle(0xf4e9ff, 1);
-        this.eyeRight.setFillStyle(0xf4e9ff, 1);
     }
 
     applyDamage(amount, fromX) {

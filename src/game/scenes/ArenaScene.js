@@ -20,9 +20,10 @@ export default class ArenaScene extends Scene {
         this.cameras.main.fadeIn(500);
         this.physics.world.setBounds(0, 0, 1280, 720);
 
-        this.background = this.add.image(640, 360, 'bg-arena')
-            .setScale(Math.max(1280 / 1344, 720 / 768))
+        this.background = this.add.sprite(640, 360, 'bg-arena-anim')
+            .setScale(Math.max(1280 / 672, 720 / 384))
             .setDepth(-10);
+        this.background.play('bg-arena-anim');
         this.floor = this.add.rectangle(640, 685, 1280, 110, 0x070a14, 0.85);
         this.floorRim = this.add.rectangle(640, 630, 1280, 2, 0x2d4a7a, 0.6);
         this.physics.add.existing(this.floor, true);

@@ -1,3 +1,5 @@
+import { DIALOGUE_FONT, DIALOGUE_SHADOW } from '../config/fonts';
+
 export default class DialogueBox {
     constructor(scene) {
         this.scene = scene;
@@ -16,18 +18,18 @@ export default class DialogueBox {
             .setDepth(110)
             .setVisible(false);
         this.speakerText = scene.add.text(160, 594, '', {
-            fontFamily: 'Arial Black',
-            fontSize: '18px',
+            fontFamily: DIALOGUE_FONT,
+            fontSize: '22px',
+            fontStyle: 'bold',
             color: '#f5d58a',
-            stroke: '#000000',
-            strokeThickness: 4,
+            shadow: DIALOGUE_SHADOW,
         }).setScrollFactor(0).setDepth(111).setVisible(false);
         this.lineText = scene.add.text(160, 626, '', {
-            fontFamily: 'Arial',
-            fontSize: '20px',
+            fontFamily: DIALOGUE_FONT,
+            fontSize: '24px',
             color: '#f5ead8',
-            stroke: '#000000',
-            strokeThickness: 4,
+            shadow: DIALOGUE_SHADOW,
+            lineSpacing: 6,
             wordWrap: { width: 920 },
         }).setScrollFactor(0).setDepth(111).setVisible(false);
 

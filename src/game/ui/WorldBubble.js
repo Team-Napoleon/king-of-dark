@@ -5,6 +5,7 @@ import {
     layoutBubbleText,
     sliceWrappedText,
 } from './SpeechBubble';
+import { DIALOGUE_FONT, DIALOGUE_SHADOW } from '../config/fonts';
 
 const HERO_BUBBLE_DEPTH = 104;
 
@@ -37,11 +38,10 @@ export default class WorldBubble {
             .setVisible(false);
         const graphics = this.scene.add.graphics();
         const text = this.scene.add.text(0, 0, '', {
-            fontFamily: 'Arial, sans-serif',
+            fontFamily: DIALOGUE_FONT,
             fontSize: `${INTRO_ACTORS.bubble.fontSize}px`,
             color: INTRO_ACTORS.bubble.textColor,
-            stroke: '#000000',
-            strokeThickness: 3,
+            shadow: { ...DIALOGUE_SHADOW, offsetX: 1, offsetY: 1 },
             lineSpacing: 2,
         }).setResolution(2);
         container.add([graphics, text]);
@@ -129,9 +129,10 @@ export default class WorldBubble {
             .setColor(isVoice ? this.voiceStyle.textColor : toCssColor(speaker.color))
             .setFontStyle(isVoice ? this.voiceStyle.fontStyle || 'italic' : 'normal')
             .setOrigin(isFloatingText ? 0.5 : 0, isFloatingText ? 0.5 : 0)
+            .setStroke('#000000', isVoice ? 3 : 0)
             .setShadow(
-                0,
-                0,
+                isVoice ? 0 : 1,
+                isVoice ? 0 : 1,
                 isVoice ? toCssColor(this.voiceStyle.glowColor, '#7a3cff') : '#000000',
                 isVoice ? 12 : 0,
                 false,

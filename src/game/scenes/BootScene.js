@@ -1,4 +1,6 @@
 import { Scene, Textures } from 'phaser';
+import { DIALOGUE_FONT } from '../config/fonts';
+import { addDiamond, addDivider, addEmbers, addVignette } from '../ui/MenuFx';
 import { preloadSheets } from '../config/animationData';
 import { INTRO_ACTORS } from '../config/introActors';
 import { preloadIntroImages } from '../config/introData';
@@ -18,37 +20,8 @@ export default class BootScene extends Scene {
     }
 
     preload() {
-        const centerX = this.scale.width / 2;
-        const centerY = this.scale.height / 2;
-        const progressBox = this.add.rectangle(centerX, centerY + 30, 320, 20, 0x211b27)
-            .setStrokeStyle(2, 0x7e5a40);
-        const progressBar = this.add.rectangle(centerX - 156, centerY + 30, 0, 12, 0xf5d58a)
-            .setOrigin(0, 0.5);
-        const loadingText = this.add.text(centerX, centerY - 12, 'LOADING...', {
-            fontFamily: 'Arial',
-            fontSize: '24px',
-            color: '#f5d7a1',
-            stroke: '#000000',
-            strokeThickness: 5,
-        }).setOrigin(0.5);
-
-        this.load.on('progress', (value) => {
-            if (!progressBar || !progressBar.active) {
-                return;
-            }
-            progressBar.width = 312 * value;
-        });
-        this.load.once('complete', () => {
-            if (progressBox && progressBox.active) {
-                progressBox.destroy();
-            }
-            if (progressBar && progressBar.active) {
-                progressBar.destroy();
-            }
-            if (loadingText && loadingText.active) {
-                loadingText.destroy();
-            }
-        });
+        this.bootStartedAt = performance.now();
+        this.buildLoadingScreen();
 
         preloadSheets(this);
         preloadIntroImages(this);
@@ -128,6 +101,139 @@ export default class BootScene extends Scene {
         this.load.image('bg-menu', 'assets/backgrounds/menu.jpg');
         this.load.image('bg-temple', 'assets/backgrounds/temple.jpg');
         this.load.image('bg-arena', 'assets/backgrounds/arena.jpg');
+        this.load.spritesheet('bg-menu-anim', 'assets/backgrounds/menu_animated_sheet.png', {
+            frameWidth: 672,
+            frameHeight: 384,
+            startFrame: 0,
+            endFrame: 11,
+        });
+        this.load.spritesheet('bg-arena-anim', 'assets/backgrounds/arena_animated_sheet.png', {
+            frameWidth: 672,
+            frameHeight: 384,
+            startFrame: 0,
+            endFrame: 11,
+        });
+    }
+
+    buildLoadingScreen() {
+        const { width, height } = this.scale;
+        const centerX = width / 2;
+        const barW = 520;
+        const barH = 16;
+        const barY = height / 2 + 120;
+
+        this.cameras.main.setBackgroundColor('#07080d');
+        this.add.rectangle(centerX, height / 2, width, height, 0x0d0a16, 1).setDepth(-10);
+        for (let i = 0; i < 10; i += 1) {
+            // stacked translucent discs = soft purple glow behind the title
+            this.add.circle(centerX, height / 2 - 40, 340 - i * 30, 0x4a2380, 0.035).setDepth(-9);
+        }
+        addEmbers(this, { count: 26, depth: 2 });
+        addVignette(this, { depth: 40 });
+
+        // spinning rune above the title
+        const runeOuter = addDiamond(this, centerX, 214, 34, 0xf5d58a, false);
+        const runeInner = addDiamond(this, centerX, 214, 16, 0xb57cff, true);
+        this.tweens.add({ targets: runeOuter, angle: 405, duration: 5200, repeat: -1 });
+        this.tweens.add({ targets: runeInner, angle: -315, duration: 3200, repeat: -1 });
+        this.tweens.add({
+            targets: runeInner,
+            alpha: { from: 0.4, to: 1 },
+            duration: 900,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut',
+        });
+
+        const titleStyle = {
+            fontFamily: DIALOGUE_FONT,
+            fontSize: '64px',
+            fontStyle: 'bold',
+            letterSpacing: 6,
+        };
+        this.add.text(centerX, 290, 'KING OF DARK', {
+            ...titleStyle,
+            color: '#a76bff',
+            shadow: { offsetX: 0, offsetY: 0, color: '#a76bff', blur: 30, stroke: true, fill: true },
+        }).setOrigin(0.5).setAlpha(0.55);
+        this.add.text(centerX, 290, 'KING OF DARK', {
+            ...titleStyle,
+            color: '#f7d7a5',
+            shadow: { offsetX: 4, offsetY: 4, color: '#000000', blur: 0, stroke: false, fill: true },
+        }).setOrigin(0.5);
+        addDivider(this, centerX, 336, 400);
+
+        // progress bar: dark track, gold frame, glowing purple-gold fill
+        this.add.rectangle(centerX, barY, barW + 12, barH + 12, 0x000000, 0.7)
+            .setStrokeStyle(2, 0xf5d58a, 0.9);
+        this.add.rectangle(centerX, barY, barW + 22, barH + 22, 0x000000, 0)
+            .setStrokeStyle(1, 0xf5d58a, 0.3);
+        this.add.rectangle(centerX, barY, barW, barH, 0x1a1426, 1);
+        const fill = this.add.rectangle(centerX - barW / 2, barY, 0, barH, 0xb57cff, 1).setOrigin(0, 0.5);
+        const shine = this.add.rectangle(centerX - barW / 2, barY, 0, 4, 0xfff0c8, 0.65)
+            .setOrigin(0, 0.5)
+            .setY(barY - 3);
+        const spark = this.add.circle(centerX - barW / 2, barY, 9, 0xffd98a, 0.9);
+        const percentText = this.add.text(centerX, barY + 40, 'LOADING  0%', {
+            fontFamily: DIALOGUE_FONT,
+            fontSize: '22px',
+            fontStyle: 'bold',
+            color: '#f5d7a1',
+            letterSpacing: 4,
+            shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 0, stroke: false, fill: true },
+        }).setOrigin(0.5);
+
+        const tips = [
+            'The dark remembers every soul that climbs the stairs.',
+            'Armored foes shrug off chip damage. Wait for the opening.',
+            'Keep moving. The King punishes the hesitant.',
+            'Not every orb is a gift.',
+        ];
+        const tipText = this.add.text(centerX, height - 84, tips[0], {
+            fontFamily: DIALOGUE_FONT,
+            fontSize: '18px',
+            color: '#9d97b8',
+            letterSpacing: 1,
+        }).setOrigin(0.5);
+        let tipIndex = 0;
+        this.time.addEvent({
+            delay: 2600,
+            loop: true,
+            callback: () => {
+                tipIndex = (tipIndex + 1) % tips.length;
+                this.tweens.add({
+                    targets: tipText,
+                    alpha: 0,
+                    duration: 250,
+                    onComplete: () => {
+                        tipText.setText(tips[tipIndex]);
+                        this.tweens.add({ targets: tipText, alpha: 1, duration: 250 });
+                    },
+                });
+            },
+        });
+
+        // smooth the bar towards the real load progress
+        const shown = { value: 0 };
+        const apply = () => {
+            const w = Math.max(0, barW * shown.value);
+            fill.width = w;
+            shine.width = Math.max(0, w - 4);
+            spark.x = centerX - barW / 2 + w;
+            spark.setVisible(w > 2);
+            percentText.setText(`LOADING  ${Math.round(shown.value * 100)}%`);
+        };
+        this.load.on('progress', (value) => {
+            this.tweens.add({ targets: shown, value, duration: 220, ease: 'Sine.easeOut', onUpdate: apply });
+        });
+        this.tweens.add({
+            targets: spark,
+            scale: { from: 0.7, to: 1.3 },
+            alpha: { from: 0.5, to: 1 },
+            duration: 420,
+            yoyo: true,
+            repeat: -1,
+        });
     }
 
     create() {
@@ -166,6 +272,19 @@ export default class BootScene extends Scene {
         ].forEach((textureKey) => {
             if (this.textures.exists(textureKey)) {
                 this.textures.get(textureKey).setFilter(Textures.FilterMode.NEAREST);
+            }
+        });
+        ['bg-menu-anim', 'bg-arena-anim'].forEach((textureKey) => {
+            if (this.textures.exists(textureKey)) {
+                this.textures.get(textureKey).setFilter(Textures.FilterMode.NEAREST);
+            }
+            if (!this.anims.exists(textureKey)) {
+                this.anims.create({
+                    key: textureKey,
+                    frames: this.anims.generateFrameNumbers(textureKey, { start: 0, end: 11 }),
+                    frameRate: 11,
+                    repeat: -1,
+                });
             }
         });
         if (!this.anims.exists('orb-fear-pulse')) {
@@ -329,6 +448,11 @@ export default class BootScene extends Scene {
             });
             return;
         }
-        this.scene.start('MainMenuScene');
+        const minimumMs = 1800;
+        const wait = Math.max(0, minimumMs - (performance.now() - (this.bootStartedAt || 0)));
+        this.time.delayedCall(wait + 250, () => {
+            this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('MainMenuScene'));
+            this.cameras.main.fadeOut(450, 0, 0, 0);
+        });
     }
 }

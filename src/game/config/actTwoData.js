@@ -120,5 +120,5 @@ export const ACT2_FEAR_OUTSIDE_BEATS = [
     { id: 'lock',    type: 'lockControls', value: true },
     { id: 'enter',   type: 'fx', name: 'heroWalksIn' },                              // hero walks into the arch, picture fades with him
     { id: 'dark',    type: 'fx', name: 'darken' },                                   // the screen darkens
-    { id: 'go',      type: 'goto', scene: 'HAUNTED_CORRIDOR' },                      // = ACT2_FX.next (fallback MainMenuScene)
+    { id: 'go',      type: 'goto', scene: 'HauntedCorridorScene' },                 // must match the scene key (= ACT2_FX.next)
 ];

@@ -1,6 +1,7 @@
 import { Math as PMath } from 'phaser';
 import { INTRO_ACTORS } from '../config/introActors';
 import { EFFECTS, SPEAKER_COLORS } from '../config/introData';
+import { DIALOGUE_FONT, DIALOGUE_SHADOW } from '../config/fonts';
 
 export function layoutBubbleText(text, { fontSize = 14, padding = 10, maxWidth = 210 } = {}) {
     const words = text.split(' ');
@@ -10,7 +11,7 @@ export function layoutBubbleText(text, { fontSize = 14, padding = 10, maxWidth =
     if (!context) {
         throw new Error('Unable to create a text measurement context for speech bubbles.');
     }
-    context.font = `${fontSize}px Arial`;
+    context.font = `${fontSize}px ${DIALOGUE_FONT}`;
 
     let currentLine = '';
     for (const word of words) {
@@ -95,11 +96,10 @@ export default class SpeechBubble {
         this.graphics = scene.add.graphics();
 
         this.bodyText = scene.add.text(0, 0, '', {
-            fontFamily: 'Arial, sans-serif',
+            fontFamily: DIALOGUE_FONT,
             fontSize: `${style.fontSize ?? 14}px`,
             color: style.textColor || '#f2ecff',
-            stroke: '#000000',
-            strokeThickness: 3,
+            shadow: { ...DIALOGUE_SHADOW, offsetX: 1, offsetY: 1 },
             lineSpacing: 2,
         });
 

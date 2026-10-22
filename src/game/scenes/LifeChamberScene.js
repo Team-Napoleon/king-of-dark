@@ -9,6 +9,7 @@ import { CHAMBER, CHAMBER_BEATS, CRAWLER, LIFE_ASSETS, LIFE_FAIL, WAVES } from '
 import { DEBUG_KEYS, HERO_MOVES, HERO_PHYSICS, HERO_STAND_PX } from '../config/animationData';
 import { LIFE_FLOW } from '../config/lifeAfterData';
 import { TIME_DEBUG } from '../config/timeData';
+import { ORB_NAMES, ORB_ORDER, orbHudText } from '../config/actTruthData';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -292,7 +293,7 @@ export default class LifeChamberScene extends Scene {
             return { name, elapsed: 0, duration: CHAMBER.orbRise.floatToHeroSeconds };
         }
         if (name === 'bannerOrb') {
-            this.bannerTitle.setText(beat.text || 'ORB OF LIFE');
+            this.bannerTitle.setText(ORB_NAMES[LIFE_FLOW.orbId]);
             this.bannerSub.setText(beat.sub || 'Life holds on.');
             this.bannerBack.setVisible(true).setAlpha(0);
             this.bannerTitle.setVisible(true).setAlpha(0);
@@ -303,7 +304,9 @@ export default class LifeChamberScene extends Scene {
             const current = this.registry.get('orbs');
             const orbs = Array.isArray(current) ? current : [];
             const orbId = beat.orb || LIFE_FLOW.orbId;
-            if (!orbs.includes(orbId)) this.registry.set('orbs', [...orbs, orbId]);
+            if (ORB_ORDER.includes(orbId) && !orbs.includes(orbId)) {
+                this.registry.set('orbs', [...orbs, orbId]);
+            }
             this.updateOrbHud(true);
             this.hudOrbPulse = 0;
             return { name, elapsed: 0, duration: 0.4 };
@@ -553,7 +556,7 @@ export default class LifeChamberScene extends Scene {
         const count = Array.isArray(orbs) ? orbs.length : 0;
         if (force || count !== this.orbCount) {
             this.orbCount = count;
-            this.orbText.setText(`ORBS ${count}/5`);
+            this.orbText.setText(orbHudText(count));
         }
         if (this.hudOrbPulse < 0) this.orbText.setColor(this.lifeHudColor).setAlpha(1);
     }

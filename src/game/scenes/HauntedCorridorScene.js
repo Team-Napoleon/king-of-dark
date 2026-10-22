@@ -21,6 +21,7 @@ import {
     STALKER_SHEETS,
 } from '../config/actThreeData';
 import { DEBUG_KEYS, HERO_PHYSICS, HERO_STAND_PX } from '../config/animationData';
+import { ORB_NAMES, ORB_ORDER, orbHudText } from '../config/actTruthData';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -612,14 +613,16 @@ export default class HauntedCorridorScene extends Scene {
                 if (!this.collectedFear) {
                     const orbs = this.registry.get('orbs');
                     const list = Array.isArray(orbs) ? orbs : [];
-                    if (!list.includes(ORB_FEAR.key)) {
+                    if (ORB_ORDER.includes(ORB_FEAR.key) && !list.includes(ORB_FEAR.key)) {
                         this.registry.set('orbs', [...list, ORB_FEAR.key]);
                     }
                     this.collectedFear = true;
                     this.updateOrbHud(true);
                 }
-                this.objectiveText.setText(ORB_FEAR.hud.text).setAlpha(1).setVisible(true);
-                this.objectiveSub.setText(ORB_FEAR.hud.sub).setAlpha(1).setVisible(true);
+                const orbs = this.registry.get('orbs');
+                const count = Array.isArray(orbs) ? orbs.length : 0;
+                this.objectiveText.setText(ORB_NAMES[ORB_FEAR.key]).setAlpha(1).setVisible(true);
+                this.objectiveSub.setText(orbHudText(count)).setAlpha(1).setVisible(true);
                 return true;
             }
             return false;
@@ -679,7 +682,7 @@ export default class HauntedCorridorScene extends Scene {
         const count = Array.isArray(orbs) ? orbs.length : 0;
         if (force || count !== this.orbCount) {
             this.orbCount = count;
-            this.orbText.setText(`ORBS ${count}/${ACT2_FX.orbHud.total}`);
+            this.orbText.setText(orbHudText(count));
         }
     }
 

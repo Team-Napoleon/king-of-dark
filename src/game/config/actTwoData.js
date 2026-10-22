@@ -1,4 +1,5 @@
 // KING OF DARK - ACT II (Scene 6 dark village) + ACT III opening (Scene 7 outside the Haunted Corridor).
+import { ORB_TOTAL } from './actTruthData';
 // Copy to: src/game/config/actTwoData.js
 // Source script: "King of Dark: Full Script (Readable English)". Wording = script wording. Times are SECONDS, positions are
 // FRACTIONS of the background width/height so the art can be swapped without touching code.
@@ -12,7 +13,7 @@
 // world width = scaled width (camera follows the hero, bounds = world).
 // ---------------------------------------------------------------------------------------------------------------
 export const DARKWORLD_BG = {
-    key: 'dark-outside', file: 'assets/backgrounds/outbackgraound.jpeg',
+    key: 'dark-outside', file: 'assets/Backgrounds/outbackground.jpeg',
     cropY: 82, cropH: 606, srcW: 1344,
     floorFrac: 0.870,          // feet line = cropY-relative fraction of the cropped height (stone path top ~ y 610 of 768)
     archXFrac: 0.500,          // the stone archway = the Haunted Corridor doorway
@@ -27,9 +28,9 @@ export const MINA_SHEETS = {
     frameWidth: 352, frameHeight: 218, columns: 8, frameCount: 62, fps: 12,
     // key -> file
     textures: {
-        'mina-float-right': 'assets/mina_float_right_sheet.png', 'mina-float-left': 'assets/mina_float_left_sheet.png',
-        'mina-glide-right': 'assets/mina_glide_right_sheet.png', 'mina-glide-left': 'assets/mina_glide_left_sheet.png',
-        'mina-guide-right': 'assets/mina_guide_right_sheet.png', 'mina-guide-left': 'assets/mina_guide_left_sheet.png',
+        'mina-float-right': 'assets/Mina/mina_float_right_sheet.png', 'mina-float-left': 'assets/Mina/mina_float_left_sheet.png',
+        'mina-glide-right': 'assets/Mina/mina_glide_right_sheet.png', 'mina-glide-left': 'assets/Mina/mina_glide_left_sheet.png',
+        'mina-guide-right': 'assets/Mina/mina_guide_right_sheet.png', 'mina-guide-left': 'assets/Mina/mina_guide_left_sheet.png',
     },
     // clips: idle = float (talking default), move = glide (travelling), point = guide (she gestures and spirits drift out)
     clips: { idle: 'float', move: 'glide', point: 'guide' },
@@ -63,7 +64,7 @@ export const ACT2_FX = {
                 landOffsetFromHero: 150, side: 'right' },                    // she lands this far to the hero's right, then both face each other
     minaLeads: { seconds: 2.6, dir: 1, speedPx: 140, fadeOutAfter: 1.4 },    // Mina glides east, hero is released, then fade to scene 7
     objective: { color: '#f5d58a', fontSize: 18, x: 24, y: 24, fadeIn: 0.5, hold: 4.0, fadeOut: 0.8, pulse: 0.6 },
-    orbHud: { x: -24, y: 24, total: 5, color: '#b9bbcf', fontSize: 16 },     // top-right "ORBS 0/5", registry orbs[]
+    orbHud: { x: -24, y: 24, total: ORB_TOTAL, color: '#b9bbcf', fontSize: 16 },
     arrowLeft: { text: '<<', color: '#f5d58a', pulseSeconds: 1.0, marginLeft: 40, y: 360 },
     arrowRight: { text: '>>', color: '#f5d58a', pulseSeconds: 1.0, marginRight: 40, y: 360 },
     // scene 7
@@ -98,7 +99,7 @@ export const ACT2_VILLAGE_BEATS = [
     { id: 'v5', type: 'line', who: 'HERO', text: 'Who are you? What happened here?' },
     { id: 'm2', type: 'line', who: 'MINA', text: 'You opened the door, and the dark walked out.' },
     { id: 'v6', type: 'line', who: 'HERO', text: "Then I'll close it." },
-    { id: 'm3', type: 'line', who: 'MINA', text: 'Five orbs can seal it. Fear, Time, Life, Souls and Truth.', gesture: 'point' },
+    { id: 'm3', type: 'line', who: 'MINA', text: 'Four orbs can seal it. Fear, Time, Life and Truth.', gesture: 'point' },
     { id: 'v7', type: 'line', who: 'HERO', text: 'Why are you helping me?' },
     { id: 'm4', type: 'line', who: 'MINA', text: "Because I'm tired of watching this world end." },
     { id: 'm5', type: 'line', who: 'MINA', text: "Start with Fear. Take the east road, and don't trust the quiet.", gesture: 'point' },

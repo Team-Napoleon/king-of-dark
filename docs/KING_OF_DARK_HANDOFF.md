@@ -46,14 +46,13 @@ Standing rules for every task: targeted edits only, no new dependencies, import 
 
 ## 2. Story (needed for any cutscene/dialogue work)
 
-The hero hungers for power and enters an ancient temple to take the crown of the King of Dark. He kills the King, who says he knows nothing of the throne he seeks. A shadow erupts and consumes the world. The hero wakes in a corrupted world, meets **Mina** (a mysterious survivor who knows too much), and must collect **five orbs** to undo it. Each orb reveals he is repeating the cycle. He finally becomes the next King of Dark and fights his younger self (the "past hero"). Two endings (A first, B only if time).
+The hero hungers for power and enters an ancient temple to take the crown of the King of Dark. He kills the King, who says he knows nothing of the throne he seeks. A shadow erupts and consumes the world. The hero wakes in a corrupted world, meets **Mina** (a mysterious survivor who knows too much), and must collect **four orbs** to undo it. Each orb reveals he is repeating the cycle. He finally becomes the next King of Dark and fights his younger self (the "past hero"). Two endings (A first, B only if time).
 
 Orbs and their missions:
 1. **Fear** — Haunted Corridor, shadow stalker chase.
 2. **Time** — Endless Room, three-door looping puzzle.
 3. **Life** — Ruined Settlement, defeat 2–3 shadow creatures.
-4. **Souls** — Forgotten Crypt, destroy three shadow seals, guardian enemy.
-5. **Truth** — King's Forgotten Chamber, mirror, "False Hero" reflection fight.
+4. **Truth** — Buried Crown, face the Many Remembered and the truth of the cycle.
 
 Tone rules: Mina speaks short and cryptic. The King speaks short and weary. Keep the loop twist unexplained until late.
 
@@ -194,12 +193,12 @@ Priority order, with the tech each needs. Full scene and mission designs are in 
 1. **Cutscene system.** Build a reusable `CutsceneManager`: takes a list of steps `{ image, camera move (zoom/pan), lines, sfx, shake, fade }`. Illustrated stills (1344×768 from Leonardo) with slow Ken Burns motion, letterbox, Enter to skip, plays once. Reuses `DialogueBox` and `Letterbox`.
 2. **`DialogueBox` portraits.** Add a portrait (about 180 px) on the left, speaker name, and typewriter text. Used for Mina, survivors, the King, the past hero.
 3. **Opening cinematic** (3 stills, about 25 s) and the **King's last words + shadow engulfs the temple** scene after the boss dies. Then a `DarknessScene` transition.
-4. **Corrupted world** scene (Familiar Street), Mina's introduction, and a shared `gameProgress` state: `{ fear, time, life, souls, truth: false, currentObjective: 0 }`.
-5. **One reusable orb-mission system**, with a different encounter per orb (chase, door puzzle, enemy wave, three seals, mirror shadow). Reusable **orb-acquired sequence** (about 6 s): freeze, orb floats to the hero, coloured flash, title card "ORB OF X — n/5", then Mina's line.
+4. **Corrupted world** scene (Familiar Street), Mina's introduction, and a shared `gameProgress` state: `{ fear, time, life, truth: false, currentObjective: 0 }`.
+5. **One reusable orb-mission system**, with a different encounter per orb (chase, door puzzle, enemy wave, memory boss). Reusable **orb-acquired sequence** (about 6 s): freeze, orb floats to the hero, coloured flash, title card "ORB OF X — n/4", then Mina's line.
 6. Mirror foreshadow scene, transformation into King, past-hero portal scene, final fight (player is the King vs. past hero AI), endings A/B.
 7. Sprite art for temple monsters (currently Graphics placeholders) and audio.
 
-Orb colours (proposed): Fear violet, Time blue, Life green, Souls pale teal-white, Truth gold.
+Orb colours: Fear violet, Time blue, Life pink, Truth crimson.
 
 **Art pipeline:** Leonardo AI (Lucid Origin), 1344×768 for backgrounds and cutscene stills, 1024×1024 portraits on plain dark backgrounds, style/character reference images for consistency. No text inside generated images; all text is drawn in Phaser. Palette: deep navy shadows, near-black stone with pale blue rim light, amber torchlight as the only warm colour, violet for the King's power.
 

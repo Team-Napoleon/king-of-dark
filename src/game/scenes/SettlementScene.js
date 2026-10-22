@@ -19,6 +19,7 @@ import {
     WAVES,
 } from '../config/lifeData';
 import { DEBUG_KEYS, HERO_PHYSICS, HERO_STAND_PX } from '../config/animationData';
+import { orbHudText } from '../config/actTruthData';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -641,7 +642,7 @@ export default class SettlementScene extends Scene {
     updateOrbHud() {
         const orbs = this.registry.get('orbs');
         const count = Array.isArray(orbs) ? orbs.length : 0;
-        this.orbText.setText(`ORBS ${count}/${ACT2_FX.orbHud.total}`);
+            this.orbText.setText(orbHudText(count));
     }
 
     beginWave() {

@@ -37,7 +37,7 @@
 ## Act III, Run 10B/10C — Life Chamber and After Life
 
 - Completed Scene 14's timer-driven pink Orb of Life sequence, registry-deduplicated collection, HUD pulse/count, wave retry-safe cleanup, and guarded handoff to AfterLifeScene. Added the chamber grid route and debug-only F5 crawler clear.
-- Added AfterLifeScene with the full-level settlement fire, darkness lighting, hero emergence, elder/Mina dialogue, orb-count substitution, Souls objective, exit walk, and guarded Scene 16/menu handoff. Registered the scene and `?scene=MinaAfterLife` route.
+- Added AfterLifeScene with the full-level settlement fire, darkness lighting, hero emergence, elder/Mina dialogue, orb-count substitution, Truth objective, exit walk, and guarded Scene 16/menu handoff. Registered the scene and `?scene=MinaAfterLife` route.
 - Fixed a Crawler lifecycle issue: defeated crawlers were excluded from updates before their death timer could finish, leaving their pool slots permanently occupied. Killed crawlers now remain untargetable while their death animation completes and then reset into the pool.
 - The production build passed after each implementation phase. Browser play was not available during this run, so visual placement and runtime transitions remain for manual testing.
 - Changed files: `src/game/scenes/LifeChamberScene.js`, `src/game/scenes/AfterLifeScene.js`, `src/game/scenes/BootScene.js`, `src/game/main.js`, `src/game/entities/Crawler.js`.

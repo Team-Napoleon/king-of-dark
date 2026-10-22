@@ -6,6 +6,7 @@ import WorldBubble from '../ui/WorldBubble';
 import { ACT3_PACING, ACT3_SPEAKERS } from '../config/actThreeData';
 import { MINA_SHEETS } from '../config/actTwoData';
 import { HERO_PHYSICS, HERO_STAND_PX } from '../config/animationData';
+import { ORB_ORDER, orbHudText } from '../config/actTruthData';
 import {
     ART,
     OUTSIDE,
@@ -23,7 +24,7 @@ const SPEAKERS = {
 };
 
 function ensureOrbProgress(registry) {
-    if (registry.get('orbs') == null) registry.set('orbs', ['fear']);
+    if (registry.get('orbs') == null) registry.set('orbs', ORB_ORDER.slice(0, 1));
 }
 
 export default class ClockTowerScene extends Scene {
@@ -138,7 +139,7 @@ export default class ClockTowerScene extends Scene {
 
     updateOrbHud() {
         const orbs = this.registry.get('orbs');
-        this.orbText.setText(`ORBS ${Array.isArray(orbs) ? orbs.length : 0}/5`);
+        this.orbText.setText(orbHudText(Array.isArray(orbs) ? orbs.length : 0));
     }
 
     createHandlers() {

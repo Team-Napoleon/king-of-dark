@@ -4,6 +4,7 @@
 // "run, jump over obstacles, escape through a doorway, the monster disappears, leaving the Orb of Fear").
 // Times are SECONDS. Distances are in H = hero standing height (px) or S = hero RUN speed (px/s) so nothing depends on screen size.
 // Scene class: HauntedCorridorScene. Scene 9 reuses DarkWorldScene with part 'afterFear'.
+import { ORB_NAMES, orbHudText } from './actTruthData';
 
 // ---------------------------------------------------------------------------------------------------------------
 // ASSETS (copy into the project):
@@ -138,7 +139,7 @@ export const ORB_FEAR = {
     heldWidthH: 0.45,                 // displayed body width while it floats to the hero
     glow: { color: 0xff3a2a, radiusH: 4.0, alpha: 0.45, pulseSeconds: 1.0 },       // additive light pool (also brightens the dark mask around it)
     rises: { seconds: 1.4, riseH: 1.1 }, floatToHero: { seconds: 1.8, bobPx: 6 }, absorbFlash: { seconds: 0.5, color: 0xffc0b0 },
-    hud: { text: 'ORB OF FEAR', sub: 'ORBS 1 / 5', hold: 2.4 },
+    hud: { text: ORB_NAMES.fear, sub: orbHudText(1), hold: 2.4 },
     beaconHint: { startScreens: 2.0, color: 0xff4a3a, alpha: 0.5 },                // red glow on the right screen edge pulses when the crown is within this many screens ahead
 };
 
@@ -171,7 +172,7 @@ export const ACT3_CORRIDOR_BEATS = [
     { id: 'h4', type: 'line', who: 'HERO', text: 'The fear fades... but I can still feel it watching.' },
     { id: 'flare',   type: 'fx', name: 'runesFlare' },
     { id: 'orb',     type: 'fx', name: 'crownRises' },
-    { id: 'tohero',  type: 'fx', name: 'crownToHero' },                                  // orb counter 1 of 5, registry orbs gets 'fear' once
+    { id: 'tohero',  type: 'fx', name: 'crownToHero' },                                  // registry orbs gets 'fear' once
     { id: 'go',      type: 'goto', scene: 'DarkWorldScene', data: { part: 'afterFear' } },
 ];
 

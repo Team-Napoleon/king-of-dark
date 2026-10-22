@@ -164,6 +164,6 @@ export const AFTER_LIFE_BEATS = [
   { t: 'line', who: 'ELDER', text: 'Take it with our thanks. May it outlive us.' },
   { t: 'line', who: 'MINA', text: "{COUNT}. You're closer than you think." },   // COUNT_WORD[orbCount]
   { t: 'line', who: 'HERO', text: 'Closer to the end, or to what I did?' },
-  { t: 'line', who: 'MINA', text: 'Both. Souls is next. Follow the road to the graveyard gate.' },
-  { t: 'fx', name: 'objective', text: 'FIND THE ORB OF SOULS' },
+  { t: 'line', who: 'MINA', text: "Both. Only Truth remains, and it's the hardest. Go to the black plains and look for the ring." },
+  { t: 'fx', name: 'objective', text: 'FIND THE ORB OF TRUTH' },
 ];

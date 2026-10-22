@@ -1,12 +1,14 @@
 import { Scene, Textures } from 'phaser';
 import { DIALOGUE_FONT } from '../config/fonts';
 import { addDiamond, addDivider, addEmbers, addVignette } from '../ui/MenuFx';
-import { preloadSheets } from '../config/animationData';
+import { DEBUG_KEYS, preloadSheets } from '../config/animationData';
 import { INTRO_ACTORS } from '../config/introActors';
 import { preloadIntroImages } from '../config/introData';
 import { DARKWORLD_BG, MINA_SHEETS } from '../config/actTwoData';
 import { CORRIDOR, ORB_FEAR, STALKER_SHEETS } from '../config/actThreeData';
 import { CRAWLER as LIFE_CRAWLER, LIFE_ASSETS } from '../config/lifeData';
+import { ORB_ORDER } from '../config/actTruthData';
+import { ORB_TRUTH, TRUTH_BG, TRUTH_MONSTER } from '../config/actTruthData';
 import {
     preloadTimeAssets,
     TIME_ASSETS,
@@ -32,9 +34,11 @@ export default class BootScene extends Scene {
                 loadedHeroTextures.add(entry.texture);
             }
         });
-        this.load.image(DARKWORLD_BG.key, DARKWORLD_BG.file);
+        this.load.image(DARKWORLD_BG.key, DARKWORLD_BG.file
+            .replace('Backgrounds/', 'backgrounds/')
+            .replace('outbackground.jpeg', 'outbackgraound.jpeg'));
         Object.entries(MINA_SHEETS.textures).forEach(([key, file]) => {
-            this.load.spritesheet(key, file, {
+            this.load.spritesheet(key, file.replace('assets/Mina/', 'assets/'), {
                 frameWidth: MINA_SHEETS.frameWidth,
                 frameHeight: MINA_SHEETS.frameHeight,
                 startFrame: 0,
@@ -87,6 +91,28 @@ export default class BootScene extends Scene {
             frameHeight: LIFE_ASSETS.orb.frameHeight,
             startFrame: 0,
             endFrame: LIFE_ASSETS.orb.frames - 1,
+        });
+        this.load.image(TRUTH_BG.outside.key, TRUTH_BG.outside.file.replace('Backgrounds/', 'backgrounds/'));
+        this.load.image(TRUTH_BG.cave.key, TRUTH_BG.cave.file.replace('Backgrounds/', 'backgrounds/'));
+        Object.values(TRUTH_MONSTER.textures).forEach((sheet) => {
+            if (!sheet.fw) {
+                this.load.image('truth-cutout', sheet.file);
+                return;
+            }
+            this.load.spritesheet(sheet === TRUTH_MONSTER.textures['truth-idle']
+                ? 'truth-idle'
+                : Object.entries(TRUTH_MONSTER.textures).find(([, item]) => item === sheet)?.[0] || '', sheet.file, {
+                frameWidth: sheet.fw,
+                frameHeight: sheet.fh,
+                startFrame: 0,
+                endFrame: sheet.frames - 1,
+            });
+        });
+        this.load.spritesheet(ORB_TRUTH.texture, ORB_TRUTH.file, {
+            frameWidth: ORB_TRUTH.frameWidth,
+            frameHeight: ORB_TRUTH.frameHeight,
+            startFrame: 0,
+            endFrame: ORB_TRUTH.frames - 1,
         });
         this.timeEndlessAvailable = true;
         const onTimeAssetError = (file) => {
@@ -265,6 +291,10 @@ export default class BootScene extends Scene {
             LIFE_ASSETS.crawler.attackLeft.key,
             LIFE_ASSETS.reveal.key,
             LIFE_ASSETS.orb.key,
+            TRUTH_BG.outside.key,
+            TRUTH_BG.cave.key,
+            ...Object.keys(TRUTH_MONSTER.textures),
+            ORB_TRUTH.texture,
             ...Object.keys(TIME_ASSETS.images),
             ...Object.keys(TIME_ASSETS.optionalImages),
             ...TIME_ASSETS.chamberSheets.map((sheet) => sheet.key),
@@ -372,6 +402,29 @@ export default class BootScene extends Scene {
                 repeat: -1,
             });
         }
+        Object.entries(TRUTH_MONSTER.textures).forEach(([textureKey, sheet]) => {
+            if (!sheet.fw || !this.textures.exists(textureKey) || this.anims.exists(textureKey)) return;
+            this.anims.create({
+                key: textureKey,
+                frames: this.anims.generateFrameNumbers(textureKey, {
+                    start: 0,
+                    end: sheet.frames - 1,
+                }),
+                frameRate: sheet.fps,
+                repeat: sheet.loop ? -1 : 0,
+            });
+        });
+        if (this.textures.exists(ORB_TRUTH.texture) && !this.anims.exists('orb-truth-pulse')) {
+            this.anims.create({
+                key: 'orb-truth-pulse',
+                frames: this.anims.generateFrameNumbers(ORB_TRUTH.texture, {
+                    start: 0,
+                    end: ORB_TRUTH.frames - 1,
+                }),
+                frameRate: 1000 / ORB_TRUTH.frameMs,
+                repeat: -1,
+            });
+        }
         if (this.textures.exists('time-orb') && !this.anims.exists('time-orb-pulse')) {
             this.anims.create({
                 key: 'time-orb-pulse',
@@ -390,7 +443,7 @@ export default class BootScene extends Scene {
             new URLSearchParams(window.location.search).get('debug') === 'grid';
         if (import.meta.env.DEV &&
             (requestedScene === 'LifeChamber' || requestedScene === 'LifeChamberWave' || debugGrid)) {
-            if (this.registry.get('orbs') === undefined) this.registry.set('orbs', ['fear', 'time']);
+            if (this.registry.get('orbs') === undefined) this.registry.set('orbs', ORB_ORDER.slice(0, 2));
             this.scene.start('LifeChamberScene', {
                 waveOnly: requestedScene === 'LifeChamberWave',
             });
@@ -399,13 +452,27 @@ export default class BootScene extends Scene {
         if (import.meta.env.DEV && requestedScene === 'MinaAfterLife') {
             const currentOrbs = this.registry.get('orbs');
             if (!Array.isArray(currentOrbs) || currentOrbs.length < 3) {
-                this.registry.set('orbs', ['fear', 'time', 'life']);
+                this.registry.set('orbs', ORB_ORDER.slice(0, 3));
             }
             this.scene.start('AfterLifeScene');
             return;
         }
+        if (import.meta.env.DEV && DEBUG_KEYS &&
+            ['TruthOutside', 'TruthReveal', 'TruthCave', 'TruthBoss'].includes(requestedScene)) {
+            if (this.registry.get('orbs') == null || this.registry.get('orbs').length < 3) {
+                this.registry.set('orbs', ORB_ORDER.slice(0, 3));
+            }
+            if (requestedScene === 'TruthOutside' || requestedScene === 'TruthReveal') {
+                this.scene.start('TruthOutsideScene', {
+                    part: requestedScene === 'TruthReveal' ? 'reveal' : 'before',
+                });
+            } else {
+                this.scene.start('TruthCaveScene', { startBoss: requestedScene === 'TruthBoss' });
+            }
+            return;
+        }
         if (import.meta.env.DEV && TIME_DEBUG && TIME_FLOW.devRoutes[requestedScene]) {
-            if (this.registry.get('orbs') == null) this.registry.set('orbs', ['fear']);
+            if (this.registry.get('orbs') == null) this.registry.set('orbs', ORB_ORDER.slice(0, 1));
             this.scene.start(
                 TIME_FLOW.devRoutes[requestedScene],
                 { startChamber: requestedScene === 'TimeChamber' }
@@ -414,13 +481,13 @@ export default class BootScene extends Scene {
         }
         if (import.meta.env.DEV &&
             (requestedScene === 'Settlement' || requestedScene === 'SettlementWave' || debugGrid)) {
-            if (this.registry.get('orbs') === undefined) this.registry.set('orbs', []);
+            if (this.registry.get('orbs') === undefined) this.registry.set('orbs', ORB_ORDER.slice(0, 0));
             this.scene.start('SettlementScene', { waveOnly: requestedScene === 'SettlementWave' });
             return;
         }
         if (import.meta.env.DEV && requestedScene === 'DarkWorld') {
             if (this.registry.get('orbs') === undefined) {
-                this.registry.set('orbs', []);
+                this.registry.set('orbs', ORB_ORDER.slice(0, 0));
             }
             this.scene.start('DarkWorldScene', { part: 'village' });
             return;
@@ -441,7 +508,7 @@ export default class BootScene extends Scene {
         }
         if (import.meta.env.DEV && (requestedScene === 'Corridor' || requestedScene === 'CorridorChase')) {
             if (this.registry.get('orbs') === undefined) {
-                this.registry.set('orbs', []);
+                this.registry.set('orbs', ORB_ORDER.slice(0, 0));
             }
             this.scene.start('HauntedCorridorScene', {
                 chaseStart: requestedScene === 'CorridorChase',

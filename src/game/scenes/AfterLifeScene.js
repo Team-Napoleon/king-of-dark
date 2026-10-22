@@ -8,6 +8,7 @@ import { ACT3_PACING, ACT3_SPEAKERS } from '../config/actThreeData';
 import { HERO_PHYSICS, HERO_STAND_PX } from '../config/animationData';
 import { COUNT_WORD, LIFE_ASSETS, LIFE_SPEAKERS, SETTLEMENT } from '../config/lifeData';
 import { AFTER_LIFE, AFTER_LIFE_SCENE_BEATS, LIFE_FLOW } from '../config/lifeAfterData';
+import { orbHudText } from '../config/actTruthData';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -251,7 +252,7 @@ export default class AfterLifeScene extends Scene {
                     this.transitionStarted = true;
                     this.bubble.clear();
                     const sceneKey = beat.scene || LIFE_FLOW.next;
-                    if (this.game.scene.keys[sceneKey]) this.scene.start(sceneKey);
+                    if (this.game.scene.keys[sceneKey]) this.scene.start(sceneKey, beat.data);
                     else {
                         console.warn(`[AfterLifeScene] Scene "${sceneKey}" is not registered; returning to MainMenuScene.`);
                         this.scene.start(LIFE_FLOW.nextFallback);
@@ -390,7 +391,7 @@ export default class AfterLifeScene extends Scene {
     updateOrbHud() {
         const orbs = this.registry.get('orbs');
         const count = Array.isArray(orbs) ? orbs.length : 0;
-        this.orbText.setText(`ORBS ${count}/5`);
+        this.orbText.setText(orbHudText(count));
     }
 
     updateFire(delta) {

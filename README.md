@@ -8,7 +8,6 @@ Built for a hackathon (Nascon26) as a playable game with cutscenes, boss fights,
 
 <img width="998" height="517" alt="image" src="https://github.com/user-attachments/assets/737c9518-788c-42bf-8ea9-c0f0440a5664" />
 
-
 ## Story
 
 The hero hungers for power and climbs into a temple to claim the crown of the King of Dark. He defeats the King, who insists he knows nothing of the throne the hero is chasing. A shadow erupts and consumes the world.
